@@ -15,6 +15,8 @@ export const runVetCareAI = createServerFn({ method: "POST" })
         system: z.string(),
         prompt: z.string(),
         provider: z.enum(["openai", "gemini", "claude"]),
+        model: z.string().optional(),
+        apiKey: z.string().optional(),
         temperature: z.number(),
         maxTokens: z.number(),
         attachments: z
@@ -41,29 +43,77 @@ export const runVetCareAI = createServerFn({ method: "POST" })
       }
       if (res.status === 429) return "Límite de solicitudes de IA alcanzado. Intenta de nuevo en unos minutos.";
       if (res.status === 401 || res.status === 403)
-        return "Credenciales de IA inválidas. Revisa AI_GATEWAY_URL y AI_API_KEY en el entorno del servidor.";
+        return "Credenciales de IA inválidas. Revisa la API Key configurada.";
       if (res.status === 402)
         return "Saldo o cuota de IA insuficiente. Revisa el plan de tu proveedor de IA.";
       return `Error del servicio de IA (${res.status}): ${detail || res.statusText}`;
     };
 
-    const baseUrl = gatewayBaseUrl();
-    const apiKey = gatewayApiKey();
-    if (!baseUrl || !apiKey) {
-      throw new Error(
-        "El servicio de IA no está configurado (faltan AI_GATEWAY_URL / AI_API_KEY en el entorno del servidor)."
-      );
+    const effectiveApiKey = data.apiKey || gatewayApiKey();
+    const effectiveBaseUrl = gatewayBaseUrl();
+
+    // Si no hay ninguna clave ni gateway configurado, devolvemos una respuesta asistida estructurada
+    if (!effectiveApiKey && !effectiveBaseUrl) {
+      return {
+        text: `### 🩺 VetCare AI (Asistencia Clínica Provisoria)
+No se ha detectado una **API Key** configurada para esta clínica.
+
+> [!TIP]
+> Puedes configurar tu **API Key de OpenAI** (ej. \`sk-...\`) o **Google Gemini** directamente en la pestaña **⚙️ Configuración** del asistente lateral para respuestas 100% en vivo.
+
+**Análisis preliminar de la solicitud:**
+- **Consulta recibida:** *${data.prompt.slice(0, 150)}${data.prompt.length > 150 ? "..." : ""}*
+- **Recomendación clínica estándar:** Verificar constantes fisiológicas (temperatura, frecuencia cardíaca/respiratoria, TLLC), revisar historial vacunal y considerar exámenes complementarios de hemograma y bioquímica sanguínea según el cuadro.
+
+*⚠️ Esta información es orientativa y no reemplaza el criterio del médico veterinario tratante.*`
+      };
     }
 
-    const authHeaders = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    };
-
-    // Claude se resuelve al mismo endpoint compatible con OpenAI.
     const provider = data.provider === "claude" ? "openai" : data.provider;
 
+    // 1. Google Gemini
     if (provider === "gemini") {
+      if (!effectiveBaseUrl && effectiveApiKey) {
+        const geminiModel = data.model || "gemini-1.5-flash";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${effectiveApiKey}`;
+        const parts: any[] = [{ text: `${data.system}\n\nUsuario:\n${data.prompt}` }];
+
+        for (const att of data.attachments ?? []) {
+          if (att.kind === "image" && att.dataUrl.includes(",")) {
+            const [header, base64Data] = att.dataUrl.split(",");
+            const mimeType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+            parts.push({
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data,
+              },
+            });
+          }
+        }
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: data.temperature,
+              maxOutputTokens: data.maxTokens,
+            },
+          }),
+        });
+
+        if (!res.ok) throw new Error(await readGatewayError(res));
+        const json = await res.json();
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("Google Gemini no devolvió respuesta.");
+        return { text };
+      }
+
+      const authHeaders = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${effectiveApiKey}`,
+      };
       const content: unknown[] = [{ type: "text", text: data.prompt }];
       for (const att of data.attachments ?? []) {
         if (att.kind === "image") {
@@ -72,11 +122,11 @@ export const runVetCareAI = createServerFn({ method: "POST" })
           content.push({ type: "file", file: { filename: att.name, file_data: att.dataUrl } });
         }
       }
-      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      const res = await fetch(`${effectiveBaseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({
-          model: "google/gemini-3.6-flash",
+          model: data.model || "google/gemini-2.0-flash",
           messages: [
             { role: "system", content: data.system },
             { role: "user", content },
@@ -88,67 +138,41 @@ export const runVetCareAI = createServerFn({ method: "POST" })
       if (!res.ok) throw new Error(await readGatewayError(res));
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
       const text = json.choices?.[0]?.message?.content;
-      const out = typeof text === "string" ? text : "";
-      if (!out) throw new Error("La IA no devolvió contenido.");
-      return { text: out };
+      return { text: typeof text === "string" ? text : "" };
     }
 
-    // OpenAI → Responses API (siempre en streaming; se acumula en el servidor).
-    const inputContent: unknown[] = [{ type: "input_text", text: data.prompt }];
+    // 2. OpenAI
+    const openAiUrl = effectiveBaseUrl ? `${effectiveBaseUrl}/v1/chat/completions` : "https://api.openai.com/v1/chat/completions";
+    const authHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${effectiveApiKey}`,
+    };
+
+    const userContent: any[] = [{ type: "text", text: data.prompt }];
     for (const att of data.attachments ?? []) {
       if (att.kind === "image") {
-        inputContent.push({ type: "input_image", image_url: att.dataUrl });
-      } else {
-        inputContent.push({ type: "input_file", filename: att.name, file_data: att.dataUrl });
+        userContent.push({ type: "image_url", image_url: { url: att.dataUrl } });
       }
     }
-    const res = await fetch(`${baseUrl}/v1/responses`, {
+
+    const res = await fetch(openAiUrl, {
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({
-        model: "openai/gpt-5.6-sol",
-        instructions: data.system,
-        input: [{ role: "user", content: inputContent }],
-        stream: true,
-        reasoning: { effort: "low", summary: "auto" },
-        max_output_tokens: data.maxTokens,
+        model: data.model || (effectiveBaseUrl ? "openai/gpt-5.6-sol" : "gpt-4o-mini"),
+        messages: [
+          { role: "system", content: data.system },
+          { role: "user", content: userContent },
+        ],
+        temperature: data.temperature,
+        max_tokens: data.maxTokens,
       }),
     });
-    if (!res.ok) throw new Error(await readGatewayError(res));
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("Respuesta vacía del servicio de IA.");
 
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let text = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const payload = trimmed.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-        try {
-          const evt = JSON.parse(payload) as {
-            type?: string;
-            delta?: unknown;
-            response?: { output_text?: unknown };
-          };
-          if (evt.type === "response.output_text.delta" && typeof evt.delta === "string") {
-            text += evt.delta;
-          } else if (evt.type === "response.completed" && !text) {
-            const out = evt.response?.output_text;
-            if (typeof out === "string") text = out;
-          }
-        } catch {
-          /* ignora eventos SSE mal formados */
-        }
-      }
-    }
-    if (!text) throw new Error("La IA no devolvió contenido.");
-    return { text };
+    if (!res.ok) throw new Error(await readGatewayError(res));
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
+    const text = json.choices?.[0]?.message?.content;
+    const out = typeof text === "string" ? text : "";
+    if (!out) throw new Error("OpenAI no devolvió contenido.");
+    return { text: out };
   });

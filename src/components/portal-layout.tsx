@@ -21,6 +21,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationsMenu } from "@/components/notifications-menu";
 import { PortalUserNavDropdown } from "@/components/portal-user-nav-dropdown";
 import { PwaInstallButton } from "@/components/pwa-install-button";
+import { PortalAIAssistant } from "@/components/portal-ai-assistant";
 
 const nav = [
   { to: "/portal/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -161,6 +162,7 @@ export function PortalLayout({ children }: { children?: ReactNode }) {
         <OfflineBanner />
         <main className="flex-1 p-4 md:p-8 overflow-auto">{children ?? <Outlet />}</main>
       </div>
+      <PortalAIAssistant />
       </div>
     </>
   );

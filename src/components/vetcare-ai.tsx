@@ -17,6 +17,13 @@ import {
   Upload,
   Trash2,
   X,
+  Mic,
+  MicOff,
+  Eye,
+  EyeOff,
+  Package,
+  AlertTriangle,
+  Volume2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -52,9 +59,12 @@ import {
   useAiHistory,
   addAiHistoryEntry,
   clearAiHistory,
+  saveClinicAiSettings,
   type AiToolId,
   type AiProvider,
 } from "@/lib/ai-store";
+import { useClinics, useCurrentClinicId } from "@/lib/saas-store";
+import { useProducts } from "@/lib/inventory-store";
 import { runVetCareAI } from "@/lib/ai.functions";
 
 const DISCLAIMER =
@@ -256,6 +266,8 @@ function useAiRunner() {
           system: `${opts.system}\n${lang}`,
           prompt: opts.prompt,
           provider: settings.provider,
+          model: settings.model,
+          apiKey: settings.apiKey,
           temperature: settings.temperature,
           maxTokens: settings.maxTokens,
           attachments: opts.attachments,
@@ -346,6 +358,56 @@ function ToolHeading({ title, desc }: { title: string; desc: string }) {
 
 // ---------------- Herramientas ----------------
 
+function useSpeechDictation(onTranscript: (chunk: string) => void) {
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRec) {
+      const rec = new SpeechRec();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = "es-ES";
+      rec.onresult = (e: any) => {
+        let text = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            text += e.results[i][0].transcript + " ";
+          }
+        }
+        if (text) onTranscript(text);
+      };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      recognitionRef.current = rec;
+    }
+  }, [onTranscript]);
+
+  const toggle = () => {
+    if (!recognitionRef.current) {
+      toast.error("El dictado por voz no está disponible en este navegador (se recomienda Chrome o Edge).");
+      return;
+    }
+    if (listening) {
+      recognitionRef.current.stop();
+      setListening(false);
+      toast.info("Dictado pausado.");
+    } else {
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+        toast.info("🎙️ Escuchando... Dicta tus notas clínicas.");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  return { listening, toggle };
+}
+
 function ChatTool() {
   const panel = useAiPanel();
   const buildContext = useClinicalContext();
@@ -354,14 +416,67 @@ function ChatTool() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const petId = panel.petId ?? "";
+  const products = useProducts();
+
+  const { listening, toggle: toggleDictation } = useSpeechDictation((transcribed) => {
+    setInput((prev) => (prev ? `${prev} ${transcribed}` : transcribed));
+  });
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const handleCommand = (cmd: string) => {
+    if (cmd === "/inventario") {
+      const lowStock = products.filter((p) => Number(p.stock) <= Number(p.minStock));
+      let report = `### 📦 Reporte de Inventario Crítico & Vacunas\n\n`;
+      if (lowStock.length === 0) {
+        report += `✅ Todos los medicamentos y vacunas cuentan con stock por encima del nivel mínimo establecido. Total productos: ${products.length}.`;
+      } else {
+        report += `⚠️ **${lowStock.length} productos con existencias en nivel crítico o agotados:**\n\n`;
+        report += `| Medicamento / Producto | Stock Actual | Mínimo | Estado |\n|---|---|---|---|\n`;
+        for (const p of lowStock) {
+          const status = Number(p.stock) <= 0 ? "🔴 AGOTADO" : "🟡 CRÍTICO";
+          report += `| ${p.name} | **${p.stock}** | ${p.minStock} | ${status} |\n`;
+        }
+        report += `\n*Se recomienda generar orden de compra a proveedores veterinarios.*`;
+      }
+      setMessages((m) => [
+        ...m,
+        { role: "user", text: "/inventario" },
+        { role: "assistant", text: report },
+      ]);
+      return;
+    }
+
+    if (cmd === "/receta") {
+      setAiPanelTool("receta");
+      return;
+    }
+    if (cmd === "/diagnostico") {
+      setAiPanelTool("diagnostico");
+      return;
+    }
+    if (cmd === "/alta") {
+      setAiPanelTool("indicaciones");
+      return;
+    }
+    setInput(cmd + " ");
+  };
+
   const send = async () => {
     const question = input.trim();
     if (!question || loading) return;
+
+    if (question.startsWith("/")) {
+      const cmd = question.split(" ")[0];
+      if (["/inventario", "/receta", "/diagnostico", "/alta"].includes(cmd)) {
+        setInput("");
+        handleCommand(cmd);
+        return;
+      }
+    }
+
     setInput("");
     setMessages((m) => [...m, { role: "user", text: question }]);
     const transcript = [...messages, { role: "user" as const, text: question }]
@@ -380,26 +495,57 @@ function ChatTool() {
   return (
     <div className="flex flex-col h-full">
       <ToolHeading
-        title="Asistente / Buscador clínico"
-        desc="Pregunta sobre el expediente: vacunas, cirugías, medicamentos, historial…"
+        title="Copiloto Clínico & Buscador"
+        desc="Dicta notas por voz, ejecuta comandos rápidos o consulta el expediente."
       />
-      <div className="mb-3 max-w-xs">
+      <div className="mb-2 max-w-xs">
         <PetPicker value={petId} onChange={(v) => setAiPanelPet(v)} />
       </div>
-      <div className="flex-1 min-h-[280px] max-h-[420px] overflow-y-auto space-y-3 pr-1">
+
+      {/* Chips de Comandos Rápidos */}
+      <div className="flex flex-wrap gap-1.5 mb-2.5">
+        <button
+          onClick={() => handleCommand("/receta")}
+          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition-colors flex items-center gap-1"
+        >
+          💊 /receta
+        </button>
+        <button
+          onClick={() => handleCommand("/diagnostico")}
+          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition-colors flex items-center gap-1"
+        >
+          🩺 /diagnostico
+        </button>
+        <button
+          onClick={() => handleCommand("/alta")}
+          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition-colors flex items-center gap-1"
+        >
+          📄 /alta
+        </button>
+        <button
+          onClick={() => handleCommand("/inventario")}
+          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors flex items-center gap-1"
+        >
+          <AlertTriangle className="w-3 h-3" /> /inventario
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-[260px] max-h-[400px] overflow-y-auto space-y-3 pr-1">
         {messages.length === 0 && (
-          <div className="text-xs text-muted-foreground border rounded-lg p-4 space-y-1">
-            <div className="font-medium text-foreground">Ejemplos de preguntas:</div>
-            <div>• ¿Qué vacunas tiene Max?</div>
-            <div>• ¿Cuándo fue la última cirugía de Luna?</div>
-            <div>• ¿Qué medicamentos recibió Rocky en su última consulta?</div>
+          <div className="text-xs text-muted-foreground border rounded-xl p-4 space-y-2 bg-muted/20">
+            <div className="font-bold text-foreground flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-teal-600" /> Copiloto Médico Activo:
+            </div>
+            <div>• Toca el <b>micrófono</b> para dictar hallazgos de consulta en tiempo real.</div>
+            <div>• Escribe o toca <b>/inventario</b> para ver medicamentos y vacunas por agotarse.</div>
+            <div>• Escribe <b>/receta</b> o <b>/diagnostico</b> para redactar pautas farmacológicas.</div>
           </div>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed ${
+                m.role === "user" ? "bg-teal-600 text-white rounded-br-xs" : "bg-muted text-foreground rounded-bl-xs shadow-2xs border"
               }`}
             >
               {m.role === "user" ? (
@@ -413,21 +559,36 @@ function ChatTool() {
           </div>
         ))}
         {loading && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analizando expediente…
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" /> Analizando expediente clínico…
           </div>
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="flex gap-2 mt-3">
+
+      {/* Compositor con Dictado por Voz */}
+      <div className="flex gap-2 mt-3 items-center">
+        <Button
+          type="button"
+          size="icon"
+          variant={listening ? "destructive" : "outline"}
+          onClick={toggleDictation}
+          title={listening ? "Detener dictado" : "Dictar por voz"}
+          className={`h-10 w-10 shrink-0 rounded-xl transition-all ${
+            listening ? "animate-pulse ring-2 ring-red-500" : ""
+          }`}
+        >
+          {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-teal-600" />}
+        </Button>
         <Input
-          placeholder="Escribe tu pregunta…"
+          placeholder={listening ? "Escuchando tu voz en tiempo real..." : "Escribe o usa /receta, /inventario…"}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           disabled={loading}
+          className="rounded-xl"
         />
-        <Button size="icon" onClick={send} disabled={loading || !input.trim()}>
+        <Button size="icon" onClick={send} disabled={loading || !input.trim()} className="rounded-xl bg-teal-600 hover:bg-teal-700 text-white shrink-0">
           <Send className="h-4 w-4" />
         </Button>
       </div>
@@ -842,16 +1003,61 @@ function HistorialTool() {
 }
 
 function ConfigTool() {
+  const currentClinicId = useCurrentClinicId();
+  const clinics = useClinics();
+  const currentClinic = clinics.find((c) => c.id === currentClinicId);
+
   const settings = useAiSettings();
   const [form, setForm] = useState(settings);
-  useEffect(() => setForm(settings), [settings]);
+  const [emergencyPhone, setEmergencyPhone] = useState(currentClinic?.emergencyPhone || "");
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentClinic) {
+      setForm((prev) => ({
+        ...prev,
+        provider: (currentClinic.aiProvider as AiProvider) || prev.provider || "openai",
+        apiKey: currentClinic.aiApiKey || prev.apiKey || "",
+        model: currentClinic.aiModel || prev.model || "openai/gpt-5.6-sol",
+      }));
+      if (currentClinic.emergencyPhone) {
+        setEmergencyPhone(currentClinic.emergencyPhone);
+      }
+    } else {
+      setForm(settings);
+    }
+  }, [currentClinic, settings]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      updateAiSettings(form);
+      if (currentClinicId) {
+        await saveClinicAiSettings(currentClinicId, {
+          provider: form.provider,
+          apiKey: form.apiKey,
+          model: form.model,
+          emergencyPhone: emergencyPhone.trim(),
+        });
+      }
+      toast.success("Configuración de IA y Urgencias guardada con éxito en Supabase");
+    } catch (err: any) {
+      toast.error("Error al guardar: " + (err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
-      <ToolHeading title="Configuración de IA" desc="Preferencias del motor de inteligencia artificial de la clínica." />
-      <div className="grid gap-4 max-w-md">
+      <ToolHeading
+        title="Configuración de IA & Urgencias"
+        desc="Configura tus credenciales de IA (OpenAI / Gemini) y canal de emergencias guardados de forma segura en Supabase (sin localStorage)."
+      />
+      <div className="grid gap-4 max-w-md pb-6">
         <div className="space-y-1.5">
-          <Label>Proveedor de IA</Label>
+          <Label>Proveedor de Inteligencia Artificial</Label>
           <Select
             value={form.provider}
             onValueChange={(v) => {
@@ -861,7 +1067,7 @@ function ConfigTool() {
                 provider,
                 model:
                   provider === "gemini"
-                    ? "google/gemini-3.6-flash"
+                    ? "google/gemini-2.5-flash"
                     : provider === "openai"
                       ? "openai/gpt-5.6-sol"
                       : "claude-sonnet",
@@ -870,20 +1076,63 @@ function ConfigTool() {
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="openai">OpenAI (recomendado)</SelectItem>
-              <SelectItem value="gemini">Google Gemini</SelectItem>
+              <SelectItem value="openai">OpenAI (GPT-4o / GPT-5)</SelectItem>
+              <SelectItem value="gemini">Google Gemini (Flash / Pro)</SelectItem>
               <SelectItem value="claude" disabled>Anthropic Claude — próximamente</SelectItem>
             </SelectContent>
           </Select>
         </div>
+
         <div className="space-y-1.5">
-          <Label>Modelo</Label>
-          <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+          <div className="flex items-center justify-between">
+            <Label>API Key de tu cuenta ({form.provider === "gemini" ? "Google AI Studio" : "OpenAI"})</Label>
+            <span className="text-[10px] text-teal-600 font-medium">Cero LocalStorage • Guardado en Supabase</span>
+          </div>
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              placeholder={form.provider === "gemini" ? "AIzaSy..." : "sk-proj-..."}
+              value={form.apiKey || ""}
+              onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+              className="pr-10 font-mono text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           <p className="text-[11px] text-muted-foreground">
-            Informativo: el gateway utiliza el modelo predeterminado del proveedor seleccionado.
+            Ingresa tu propia clave para llamadas clínicas ilimitadas con tu cuota directa de proveedor.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+
+        <div className="space-y-1.5">
+          <Label>Modelo</Label>
+          <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} className="font-mono text-xs" />
+          <p className="text-[11px] text-muted-foreground">
+            Ejemplos: <code>openai/gpt-5.6-sol</code>, <code>gpt-4o-mini</code>, <code>google/gemini-2.5-flash</code>
+          </p>
+        </div>
+
+        <div className="space-y-1.5 pt-2 border-t">
+          <Label className="text-red-700 dark:text-red-400 font-semibold flex items-center gap-1.5">
+            🚨 Teléfono de Urgencias 24/7 (Portal de Clientes)
+          </Label>
+          <Input
+            type="tel"
+            placeholder="+506 8888-8888 o 2222-3333"
+            value={emergencyPhone}
+            onChange={(e) => setEmergencyPhone(e.target.value)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Si el triaje automático del dueño de mascota detecta signos de riesgo vital o emergencia roja, mostrará de inmediato un botón para llamar a este número.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
           <div className="space-y-1.5">
             <Label>Temperatura (0–1)</Label>
             <Input
@@ -898,7 +1147,7 @@ function ConfigTool() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Máx. tokens de salida</Label>
+            <Label>Máx. tokens</Label>
             <Input
               type="number"
               min={256}
@@ -909,6 +1158,7 @@ function ConfigTool() {
             />
           </div>
         </div>
+
         <div className="space-y-1.5">
           <Label>Idioma de las respuestas</Label>
           <Select value={form.language} onValueChange={(v) => setForm({ ...form, language: v as "es" | "en" })}>
@@ -919,14 +1169,14 @@ function ConfigTool() {
             </SelectContent>
           </Select>
         </div>
+
         <Button
-          className="w-fit"
-          onClick={() => {
-            updateAiSettings(form);
-            toast.success("Configuración de IA guardada");
-          }}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white mt-2"
+          onClick={handleSave}
+          disabled={saving}
         >
-          Guardar configuración
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Guardar configuración en Supabase
         </Button>
       </div>
     </div>

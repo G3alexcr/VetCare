@@ -21,6 +21,11 @@ export type Clinic = {
   subscriptionStatus: SubscriptionStatus;
   subdomain?: string;
   createdAt: string;
+  // AI & Emergency Configuration
+  aiProvider?: "openai" | "gemini";
+  aiApiKey?: string;
+  aiModel?: string;
+  emergencyPhone?: string;
   // extended settings
   openingHours: string;
   specialties: string[];
@@ -132,6 +137,10 @@ function mapClinic(r: DbRow): Clinic {
     subscriptionStatus: (r.subscription_status as SubscriptionStatus) ?? "Prueba",
     subdomain: String(r.subdomain ?? ""),
     createdAt: String(r.created_at ?? new Date().toISOString()),
+    aiProvider: (r.ai_provider as Clinic["aiProvider"]) ?? "openai",
+    aiApiKey: String(r.ai_api_key ?? ""),
+    aiModel: String(r.ai_model ?? "openai/gpt-5.6-sol"),
+    emergencyPhone: String(r.emergency_phone ?? "+506 2222-9999"),
     openingHours: String(r.opening_hours ?? ""),
     specialties: Array.isArray(r.specialties) ? (r.specialties as string[]) : [],
     socials: (r.socials as Clinic["socials"]) ?? {},
@@ -357,6 +366,10 @@ export const updateClinic = async (id: string, patch: Partial<Clinic>) => {
   if (patch.specialties !== undefined) row.specialties = patch.specialties;
   if (patch.socials !== undefined) row.socials = patch.socials;
   if (patch.brandColor !== undefined) row.brand_color = patch.brandColor;
+  if (patch.aiProvider !== undefined) row.ai_provider = patch.aiProvider;
+  if (patch.aiApiKey !== undefined) row.ai_api_key = patch.aiApiKey;
+  if (patch.aiModel !== undefined) row.ai_model = patch.aiModel;
+  if (patch.emergencyPhone !== undefined) row.emergency_phone = patch.emergencyPhone;
   const { error } = await db.from("clinics").update(row).eq("id", id);
   if (error) throw new Error(error.message);
   setState((s) => {

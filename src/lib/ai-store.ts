@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { db } from "./supabase";
 
 export type AiProvider = "openai" | "gemini" | "claude";
 
@@ -16,6 +17,7 @@ export type AiToolId =
 export type AiSettings = {
   provider: AiProvider;
   model: string;
+  apiKey?: string;
   temperature: number;
   maxTokens: number;
   language: "es" | "en";
@@ -34,7 +36,8 @@ export type AiHistoryEntry = {
 
 const defaultSettings: AiSettings = {
   provider: "openai",
-  model: "openai/gpt-5.6-sol",
+  model: "gpt-4o-mini",
+  apiKey: "",
   temperature: 0.3,
   maxTokens: 2048,
   language: "es",
@@ -106,4 +109,23 @@ export function setAiPanelPet(petId?: string) {
 export function closeVetCareAI() {
   panel = { ...panel, open: false };
   emit();
+}
+
+export async function saveClinicAiSettings(
+  clinicId: string,
+  patch: Partial<AiSettings> & { emergencyPhone?: string }
+) {
+  updateAiSettings(patch);
+  if (!clinicId) return;
+  const updateData: Record<string, any> = {};
+  if (patch.provider) updateData.ai_provider = patch.provider;
+  if (patch.apiKey !== undefined) updateData.ai_api_key = patch.apiKey;
+  if (patch.model) updateData.ai_model = patch.model;
+  if (patch.emergencyPhone !== undefined) updateData.emergency_phone = patch.emergencyPhone;
+  try {
+    await db.from("clinics").update(updateData).eq("id", clinicId);
+  } catch (err) {
+    console.error("Error saving AI settings to Supabase:", err);
+    throw err;
+  }
 }
