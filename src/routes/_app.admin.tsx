@@ -658,11 +658,12 @@ function WideRegisterClinicModal({
   const [status, setStatus] = useState("Prueba");
   const [selectedModules, setSelectedModules] = useState<string[]>(ALL_VET_MODULES.map(m => m.id));
 
-  // Generación automática del subdominio al escribir el nombre
+  // Generación automática del subdominio al escribir el nombre comercial
   const handleNameChange = (val: string) => {
     setName(val);
-    if (!subdomain || subdomain === name.toLowerCase().replace(/[^a-z0-9]/g, "-")) {
-      setSubdomain(val.toLowerCase().trim().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-"));
+    const clean = val.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+    if (!subdomain || subdomain === clean.slice(0, -1) || subdomain === clean) {
+      setSubdomain(clean);
     }
   };
 

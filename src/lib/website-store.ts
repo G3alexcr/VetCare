@@ -703,7 +703,25 @@ export async function deleteWebsiteSlide(id: string): Promise<void> {
 }
 
 export async function fetchPublicSite(slug: string) {
-  const { data: s } = await db.from("website_settings").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+  const cleanSlug = slug.toLowerCase().trim();
+  const cleanNoDash = cleanSlug.replace(/-/g, "");
+
+  let { data: s } = await db.from("website_settings").select("*").eq("slug", cleanSlug).eq("is_published", true).maybeSingle();
+  if (!s && cleanNoDash !== cleanSlug) {
+    const { data: s2 } = await db.from("website_settings").select("*").eq("slug", cleanNoDash).eq("is_published", true).maybeSingle();
+    s = s2;
+  }
+  if (!s) {
+    const { data: clinicMatch } = await db
+      .from("clinics")
+      .select("id")
+      .or(`subdomain.eq.${cleanSlug},subdomain.eq.${cleanNoDash}`)
+      .maybeSingle();
+    if (clinicMatch) {
+      const { data: s3 } = await db.from("website_settings").select("*").eq("clinic_id", clinicMatch.id).maybeSingle();
+      s = s3;
+    }
+  }
   if (!s) return null;
   const [sv, sl, cl, te, tm, ga, po] = await Promise.all([
     db.from("website_services").select("*").eq("clinic_id", s.clinic_id).eq("is_active", true).order("sort_order", { ascending: true }),
