@@ -235,7 +235,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
           {/* Controles superiores derechos para todos los usuarios */}
           <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-            {inClinicMode && (
+            {activeClinic && (
               <div className="hidden lg:block">
                 <Select value={currentClinicId} onValueChange={(v) => { setCurrentClinic(v); toast.success("Clínica activa actualizada"); }}>
                   <SelectTrigger className="w-[180px] h-9 text-xs">
