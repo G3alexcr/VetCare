@@ -1,44 +1,87 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useAuth } from "@/lib/auth";
-import { slugFromHost } from "@/lib/website-store";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { fetchPublicSite, slugFromHost, type WebsiteSettings, type WebsiteService, type WebsiteSlide, type WebsiteGroupItem, type WebsiteTestimonial, type WebsiteGalleryItem, type WebsitePost } from "@/lib/website-store";
+import { WebsiteRenderer } from "@/components/website-templates/WebsiteRenderer";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "VetCare — Plataforma para clínicas veterinarias" },
-      { name: "description", content: "Gestiona clientes, mascotas, agenda y consultas médicas desde un único panel." },
+      { name: "description", content: "Sitio web oficial y servicios para el cuidado de mascotas." },
     ],
   }),
   component: Index,
 });
 
 function Index() {
-  const { user, ready } = useAuth();
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      // 1. Detección por subdominio real (ej: pawspattient.vetcare.app o pawspattient.vetcare.cr)
-      const hostSub = slugFromHost(window.location.hostname);
-      if (hostSub) {
-        navigate({ to: `/site/${hostSub}` as any, replace: true });
-        return;
-      }
+  const [data, setData] = useState<{
+    settings: WebsiteSettings | null;
+    services: WebsiteService[];
+    slides: WebsiteSlide[];
+    clinic: { name: string; logo_url: string } | null;
+    team: WebsiteGroupItem[];
+    testimonials: WebsiteTestimonial[];
+    gallery: WebsiteGalleryItem[];
+    posts: WebsitePost[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
 
-      // 2. Detección por parámetro de prueba/preview (ej: vet-care-lilac.vercel.app/?s=pawspattient)
+  useEffect(() => {
+    let active = true;
+    let slug = "pawspattient"; // Clínica oficial por defecto
+    if (typeof window !== "undefined") {
+      const hostSub = slugFromHost(window.location.hostname);
       const urlParams = new URLSearchParams(window.location.search);
-      const sub = urlParams.get("s") || urlParams.get("clinic") || urlParams.get("subdominio");
-      if (sub) {
-        navigate({ to: `/site/${sub}` as any, replace: true });
-        return;
-      }
+      const querySub = urlParams.get("s") || urlParams.get("clinic") || urlParams.get("subdominio");
+      slug = hostSub || querySub || "pawspattient";
     }
-    if (!ready) return;
-    navigate({ to: user ? "/dashboard" : "/login", replace: true });
-  }, [user, ready, navigate]);
+    setLoading(true);
+    fetchPublicSite(slug)
+      .then((d) => {
+        if (active) {
+          setData(d);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-50">
+        <div className="text-slate-400 text-sm animate-pulse">Cargando sitio veterinario…</div>
+      </div>
+    );
+  }
+
+  const s = data?.settings;
+  if (!s) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🐾</div>
+          <div className="text-xl font-bold text-slate-700">Sitio no disponible</div>
+          <div className="text-sm text-slate-400 mt-2">No se encontró la configuración del sitio web para esta clínica.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen grid place-items-center bg-background">
-      <div className="text-muted-foreground text-sm">Cargando VetCare...</div>
-    </div>
+    <WebsiteRenderer
+      settings={s}
+      services={data!.services}
+      slides={data!.slides}
+      clinic={data!.clinic}
+      team={data!.team}
+      testimonials={data!.testimonials}
+      gallery={data!.gallery}
+      posts={data!.posts}
+    />
   );
 }
