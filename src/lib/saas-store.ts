@@ -19,6 +19,7 @@ export type Clinic = {
   currency: string;
   subscriptionPlanId: string;
   subscriptionStatus: SubscriptionStatus;
+  subdomain?: string;
   createdAt: string;
   // extended settings
   openingHours: string;
@@ -129,6 +130,7 @@ function mapClinic(r: DbRow): Clinic {
     currency: String(r.currency ?? "CRC"),
     subscriptionPlanId: String(r.plan_id ?? ""),
     subscriptionStatus: (r.subscription_status as SubscriptionStatus) ?? "Prueba",
+    subdomain: String(r.subdomain ?? ""),
     createdAt: String(r.created_at ?? new Date().toISOString()),
     openingHours: String(r.opening_hours ?? ""),
     specialties: Array.isArray(r.specialties) ? (r.specialties as string[]) : [],
@@ -308,6 +310,7 @@ export const addClinic = async (c: Omit<Clinic, "id" | "createdAt">) => {
     currency: c.currency,
     plan_id: c.subscriptionPlanId || null,
     subscription_status: c.subscriptionStatus,
+    subdomain: c.subdomain || null,
     opening_hours: c.openingHours,
     specialties: c.specialties ?? [],
     socials: c.socials ?? {},
@@ -317,6 +320,14 @@ export const addClinic = async (c: Omit<Clinic, "id" | "createdAt">) => {
   if (error) throw new Error(error.message);
   const item = mapClinic(data as DbRow);
   setState((s) => ({ ...s, clinics: [item, ...s.clinics] }));
+  // Sincronizar o crear registro en website_settings con el slug/subdominio asignado
+  if (item.subdomain) {
+    void db.from("website_settings").upsert({
+      clinic_id: item.id,
+      slug: item.subdomain,
+      is_published: true,
+    }, { onConflict: "clinic_id" }).then(() => {}).catch(console.error);
+  }
   return item;
 };
 
@@ -336,6 +347,12 @@ export const updateClinic = async (id: string, patch: Partial<Clinic>) => {
   if (patch.currency !== undefined) row.currency = patch.currency;
   if (patch.subscriptionPlanId !== undefined) row.plan_id = patch.subscriptionPlanId || null;
   if (patch.subscriptionStatus !== undefined) row.subscription_status = patch.subscriptionStatus;
+  if (patch.subdomain !== undefined) {
+    row.subdomain = patch.subdomain || null;
+    if (patch.subdomain) {
+      void db.from("website_settings").update({ slug: patch.subdomain }).eq("clinic_id", id).then(() => {}).catch(console.error);
+    }
+  }
   if (patch.openingHours !== undefined) row.opening_hours = patch.openingHours;
   if (patch.specialties !== undefined) row.specialties = patch.specialties;
   if (patch.socials !== undefined) row.socials = patch.socials;
