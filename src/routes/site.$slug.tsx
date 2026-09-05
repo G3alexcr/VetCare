@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { fetchPublicSite, slugFromHost, type WebsiteSettings, type WebsiteService, type WebsiteSlide, type WebsiteGroupItem, type WebsiteTestimonial, type WebsiteGalleryItem, type WebsitePost } from "@/lib/website-store";
 import { WebsiteRenderer } from "@/components/website-templates/WebsiteRenderer";
@@ -15,9 +15,15 @@ function PublicSitePage() {
 
   useEffect(() => {
     let active = true;
-    const hostSlug = typeof window !== "undefined" ? slugFromHost(window.location.hostname) : null;
-    const slug = hostSlug || slugParam;
+    // Si la ruta tiene un parámetro slug explícito (/site/:slug), usamos ese parámetro.
+    // slugFromHost solo aplica si estamos en la raíz con subdominio personalizado (ej: clinic.vetcare.app).
+    // Además ignoramos dominios de hosting como vercel.app, localhost, etc.
+    const slug = slugParam || (typeof window !== "undefined" ? slugFromHost(window.location.hostname) : null);
     setLoading(true);
+    if (!slug) {
+      setLoading(false);
+      return;
+    }
     fetchPublicSite(slug).then((d) => { if (active) { setData(d); setLoading(false); } }).catch(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [slugParam]);

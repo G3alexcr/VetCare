@@ -727,6 +727,9 @@ export async function fetchPublicSite(slug: string) {
 }
 
 export function slugFromHost(hostname: string): string | null {
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".vercel.app") || hostname.endsWith(".netlify.app")) {
+    return null;
+  }
   const parts = hostname.split(".");
   if (parts.length < 3) return null;
   return parts[0];
