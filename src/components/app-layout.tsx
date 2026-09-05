@@ -92,8 +92,6 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   const roleId = useCurrentRoleId();
   const isSuper = roleId === "role_super";
   const actingClinicId = useActingClinicId();
-  // El Super Admin puede "entrar" a una clínica (modo clínica) o estar en plataforma.
-  const inClinicMode = (actingClinicId != null || !isSuper) && pathname !== "/admin";
   const caps = usePlanCapabilities();
   const myClinics = useMyClinics();
   const currentClinicId = useCurrentClinicId();
@@ -101,16 +99,6 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
   // Notifica (push) cuando hay vacunas/desparasitaciones próximas o vencidas.
   useVaccineReminders();
-
-  // El Super Admin (dueño de la plataforma) ve solo el panel de administración,
-  // NO el sidebar de la clínica (no es dueño de una clínica).
-  const platformNav = useMemo(
-    () => ([
-      { to: "/admin", label: "Centro de Mando", icon: LayoutGrid, module: "clinicas" as RbacModule, planKey: undefined, configureOnly: true },
-      { to: "/clinicas", label: "Clínicas / Afiliados", icon: Building2, module: "clinicas" as RbacModule, planKey: undefined, configureOnly: true },
-    ]),
-    [],
-  );
 
   const visibleNav = useMemo(
     () =>
@@ -121,7 +109,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
           // En modo clínica nunca se muestran los ítems de plataforma (Centro de Mando).
           !item.configureOnly,
       ),
-    [can, caps.posEnabled, caps.tiendaOnlineEnabled, pathname],
+    [can, caps.posEnabled, caps.tiendaOnlineEnabled],
   );
   const currentModule = useMemo(
     () => nav.find((n) => pathname === n.to || pathname.startsWith(n.to + "/"))?.module,
@@ -175,7 +163,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {(inClinicMode ? visibleNav : platformNav).map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname === item.to || pathname.startsWith(item.to + "/");
             const Icon = item.icon;
             return (
@@ -194,7 +182,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
               </Link>
             );
           })}
-          {(inClinicMode ? visibleNav : platformNav).length === 0 && (
+          {visibleNav.length === 0 && (
             <div className="text-xs text-muted-foreground px-3 py-4">
               Tu rol no tiene módulos habilitados.
             </div>
