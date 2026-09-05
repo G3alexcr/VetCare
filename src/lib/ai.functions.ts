@@ -74,7 +74,10 @@ No se ha detectado una **API Key** configurada para esta clínica.
     // 1. Google Gemini
     if (provider === "gemini") {
       if (!effectiveBaseUrl && effectiveApiKey) {
-        const geminiModel = data.model || "gemini-1.5-flash";
+        let geminiModel = (data.model || "gemini-1.5-flash").trim().replace(/^google\//i, "");
+        if (!geminiModel.startsWith("gemini-")) {
+          geminiModel = "gemini-1.5-flash";
+        }
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${effectiveApiKey}`;
         const parts: any[] = [{ text: `${data.system}\n\nUsuario:\n${data.prompt}` }];
 
@@ -148,6 +151,22 @@ No se ha detectado una **API Key** configurada para esta clínica.
       Authorization: `Bearer ${effectiveApiKey}`,
     };
 
+    let targetModel = (data.model || "gpt-4o-mini").trim();
+    if (!effectiveBaseUrl) {
+      // Limpieza para OpenAI directo: eliminar prefijos como "openai/" y modelos no existentes
+      targetModel = targetModel.replace(/^openai\//i, "");
+      if (
+        targetModel.includes("gpt-5") ||
+        targetModel.includes("sol") ||
+        (!targetModel.startsWith("gpt-") &&
+          !targetModel.startsWith("o1") &&
+          !targetModel.startsWith("o3") &&
+          !targetModel.startsWith("chatgpt"))
+      ) {
+        targetModel = "gpt-4o-mini";
+      }
+    }
+
     const userContent: any[] = [{ type: "text", text: data.prompt }];
     for (const att of data.attachments ?? []) {
       if (att.kind === "image") {
@@ -159,7 +178,7 @@ No se ha detectado una **API Key** configurada para esta clínica.
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({
-        model: data.model || (effectiveBaseUrl ? "openai/gpt-5.6-sol" : "gpt-4o-mini"),
+        model: targetModel,
         messages: [
           { role: "system", content: data.system },
           { role: "user", content: userContent },

@@ -1015,11 +1015,17 @@ function ConfigTool() {
 
   useEffect(() => {
     if (currentClinic) {
+      const savedModel = currentClinic.aiModel;
+      const cleanModel =
+        !savedModel || savedModel.includes("gpt-5") || savedModel.includes("sol")
+          ? "gpt-4o-mini"
+          : savedModel;
+
       setForm((prev) => ({
         ...prev,
         provider: (currentClinic.aiProvider as AiProvider) || prev.provider || "openai",
         apiKey: currentClinic.aiApiKey || prev.apiKey || "",
-        model: currentClinic.aiModel || prev.model || "openai/gpt-5.6-sol",
+        model: cleanModel,
       }));
       if (currentClinic.emergencyPhone) {
         setEmergencyPhone(currentClinic.emergencyPhone);
@@ -1067,17 +1073,17 @@ function ConfigTool() {
                 provider,
                 model:
                   provider === "gemini"
-                    ? "google/gemini-2.5-flash"
+                    ? "gemini-1.5-flash"
                     : provider === "openai"
-                      ? "openai/gpt-5.6-sol"
+                      ? "gpt-4o-mini"
                       : "claude-sonnet",
               });
             }}
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="openai">OpenAI (GPT-4o / GPT-5)</SelectItem>
-              <SelectItem value="gemini">Google Gemini (Flash / Pro)</SelectItem>
+              <SelectItem value="openai">OpenAI (Oficial)</SelectItem>
+              <SelectItem value="gemini">Google Gemini (Oficial)</SelectItem>
               <SelectItem value="claude" disabled>Anthropic Claude — próximamente</SelectItem>
             </SelectContent>
           </Select>
@@ -1110,10 +1116,90 @@ function ConfigTool() {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Modelo</Label>
-          <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} className="font-mono text-xs" />
+          <Label>Modelo oficial</Label>
+          <Input
+            value={form.model}
+            onChange={(e) => setForm({ ...form, model: e.target.value })}
+            className="font-mono text-xs"
+            placeholder={form.provider === "gemini" ? "gemini-1.5-flash" : "gpt-4o-mini"}
+          />
+          {form.provider === "openai" ? (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "gpt-4o-mini" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "gpt-4o-mini"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                gpt-4o-mini (Recomendado)
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "gpt-4o" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "gpt-4o"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                gpt-4o (Avanzado)
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "o3-mini" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "o3-mini"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                o3-mini
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "gemini-1.5-flash" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "gemini-1.5-flash"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                gemini-1.5-flash (Recomendado)
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "gemini-2.0-flash" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "gemini-2.0-flash"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                gemini-2.0-flash
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, model: "gemini-1.5-pro" })}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                  form.model === "gemini-1.5-pro"
+                    ? "bg-teal-600 text-white border-teal-600 font-bold"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                gemini-1.5-pro
+              </button>
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground">
-            Ejemplos: <code>openai/gpt-5.6-sol</code>, <code>gpt-4o-mini</code>, <code>google/gemini-2.5-flash</code>
+            {form.provider === "openai"
+              ? "Usa gpt-4o-mini para respuestas clínicas veloces y económicas con tu API Key."
+              : "Usa gemini-1.5-flash para máxima velocidad y contexto extenso."}
           </p>
         </div>
 

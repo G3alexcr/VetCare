@@ -139,7 +139,11 @@ function mapClinic(r: DbRow): Clinic {
     createdAt: String(r.created_at ?? new Date().toISOString()),
     aiProvider: (r.ai_provider as Clinic["aiProvider"]) ?? "openai",
     aiApiKey: String(r.ai_api_key ?? ""),
-    aiModel: String(r.ai_model ?? "openai/gpt-5.6-sol"),
+    aiModel: String(
+      r.ai_model && !String(r.ai_model).includes("gpt-5") && !String(r.ai_model).includes("sol")
+        ? r.ai_model
+        : "gpt-4o-mini"
+    ),
     emergencyPhone: String(r.emergency_phone ?? "+506 2222-9999"),
     openingHours: String(r.opening_hours ?? ""),
     specialties: Array.isArray(r.specialties) ? (r.specialties as string[]) : [],
