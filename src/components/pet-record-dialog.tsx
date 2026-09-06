@@ -23,6 +23,7 @@ import { HospitalizationTab } from "@/components/hospitalization-tab";
 import { FilesTab } from "@/components/files-tab";
 import { PhotosTab } from "@/components/photos-tab";
 import { AppointmentsTab } from "@/components/appointments-tab";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { TimelineTab } from "@/components/timeline-tab";
 import type { Pet } from "@/lib/mock-data";
 import { useClientes } from "@/lib/clientes-store";
@@ -79,8 +80,10 @@ export function PetRecordDialog({
   const clientes = useClientes();
   const vets = useVeterinarios();
   const [newOpen, setNewOpen] = useState(false);
-  const [editingConsult, setEditingConsult] = useState<LinkedConsultation | null>(null);
-  const [viewConsult, setViewConsult] = useState<LinkedConsultation | null>(null);
+  const [editingConsult, setEditingConsult] = useState<Consultation | null>(null);
+  const [viewConsult, setViewConsult] = useState<Consultation | null>(null);
+  const [activeTab, setActiveTab] = useState("info");
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
 
   if (!pet) return null;
 
@@ -119,7 +122,13 @@ export function PetRecordDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-3 pr-8">
               <div className="flex items-center gap-3">
-                <img src={pet.photo} alt={pet.name} className="h-12 w-12 rounded-full object-cover" />
+                <img
+                  src={pet.photo}
+                  alt={pet.name}
+                  className="h-12 w-12 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all select-none"
+                  onClick={() => setPreviewPhoto({ url: pet.photo, title: `${pet.name} · ${pet.species}` })}
+                  title="Clic para ver foto completa"
+                />
                 <div>
                   <div className="text-lg">{pet.name}</div>
                   <div className="text-xs text-muted-foreground font-normal">
@@ -193,7 +202,13 @@ export function PetRecordDialog({
 
             <TabsContent value="info" className="mt-4">
               <div className="grid sm:grid-cols-[200px_1fr] gap-4">
-                <img src={pet.photo} alt={pet.name} className="rounded-lg aspect-square object-cover w-full" />
+                <img
+                  src={pet.photo}
+                  alt={pet.name}
+                  className="rounded-lg aspect-square object-cover object-top w-full cursor-pointer hover:opacity-95 transition-opacity shadow-sm select-none"
+                  onClick={() => setPreviewPhoto({ url: pet.photo, title: `${pet.name} · ${pet.species}` })}
+                  title="Clic para ver foto completa"
+                />
                 <div className="space-y-1 text-sm">
                   <Detail label="Nombre" value={pet.name} />
                   <Detail label="Especie" value={pet.species} />
@@ -369,6 +384,14 @@ export function PetRecordDialog({
       </Dialog>
 
       <ConsultationDetailDialog consultation={viewConsult} onClose={() => setViewConsult(null)} />
+
+      {/* Visor de Fotografía en Pantalla Completa */}
+      <ImagePreviewDialog
+        open={!!previewPhoto}
+        onOpenChange={(open) => !open && setPreviewPhoto(null)}
+        src={previewPhoto?.url}
+        title={previewPhoto?.title}
+      />
     </>
   );
 }

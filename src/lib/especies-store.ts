@@ -99,3 +99,24 @@ export function toggleEspecieEstado(id: string) {
 export function emptyEspecieDraft(): EspecieDraft {
   return { nombre: "", descripcion: "", estado: "Activo", razas: [] };
 }
+
+export function addRazaToEspecie(especieNombre: string, nuevaRaza: string): void {
+  const cleanRaza = nuevaRaza.trim();
+  const cleanEsp = especieNombre.trim();
+  if (!cleanRaza || !cleanEsp) return;
+  const esp = getEspecieByNombre(cleanEsp);
+  if (esp) {
+    if (!esp.razas.includes(cleanRaza)) {
+      const updatedRazas = [...esp.razas, cleanRaza];
+      updateEspecie(esp.id, { razas: updatedRazas });
+    }
+  } else {
+    addEspecie({
+      nombre: cleanEsp,
+      descripcion: "",
+      estado: "Activo",
+      razas: [cleanRaza],
+    });
+  }
+}
+

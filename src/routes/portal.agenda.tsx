@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Calendar as CalIcon, Plus, X, RotateCcw } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Calendar as CalIcon, Plus, X, RotateCcw, Clock, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,9 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth } from "@/lib/portal-auth";
 import { type AppointmentStatus } from "@/lib/mock-data";
 import { useAllPets } from "@/lib/pets-store";
-import { useAllAppointments, addAppointment, updateAppointment, updateAppointmentStatus } from "@/lib/store";
+import { useAllClientes } from "@/lib/clientes-store";
+import { useAllAppointments, addAppointment, updateAppointment, updateAppointmentStatus, STANDARD_HOURS } from "@/lib/store";
+import { toLocalDateStr, cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/agenda")({
@@ -41,33 +43,72 @@ function PortalAgendaPage() {
   const { owner } = usePortalAuth();
   const all = useAllAppointments();
   const pets = useAllPets();
+  const clientes = useAllClientes();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [petId, setPetId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [time, setTime] = useState("09:00");
+  const todayStr = toLocalDateStr(new Date());
+  const [date, setDate] = useState(todayStr);
+  const [time, setTime] = useState("");
   const [reason, setReason] = useState("");
 
   if (!owner) return null;
-  const isMaria = owner.email?.toLowerCase() === "maria@gmail.com" || owner.id === "00000000-0000-0000-0000-00000000f101" || owner.id === "cl_1";
-  const isJuan = owner.email?.toLowerCase() === "juan@hotmail.com" || owner.id === "00000000-0000-0000-0000-00000000f102";
-  const targetClientId = isMaria
-    ? "00000000-0000-0000-0000-00000000f101"
-    : isJuan
-    ? "00000000-0000-0000-0000-00000000f102"
-    : owner.id;
 
-  const myPets = pets.filter((p) => p.clientId === targetClientId || (isMaria && p.name === "Rocky"));
+  const emailLower = (owner.email || "").trim().toLowerCase();
+  const clientIdsForOwner = new Set<string>();
+  if (owner.id) clientIdsForOwner.add(owner.id);
+  if (emailLower) {
+    clientes
+      .filter((c) => (c.email || "").trim().toLowerCase() === emailLower)
+      .forEach((c) => clientIdsForOwner.add(c.id));
+  }
+
+  const isMaria = emailLower === "maria@gmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f101") || clientIdsForOwner.has("cl_1");
+  const isGhiulina = emailLower === "ghiulyscr@gmail.com" || clientIdsForOwner.has("5e700fd9-3323-433c-9570-294e46c10785") || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f103");
+  const myPets = pets.filter((p) => clientIdsForOwner.has(p.clientId) || (isMaria && p.name === "Rocky") || (isGhiulina && p.name === "Nani"));
   const petIds = new Set(myPets.map((p) => p.id));
-  const today = new Date().toISOString().split("T")[0];
   const mine = all.filter((a) => petIds.has(a.petId));
-  const upcoming = mine.filter((a) => a.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  const history = mine.filter((a) => a.date < today).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const upcoming = mine.filter((a) => a.date >= todayStr).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const history = mine.filter((a) => a.date < todayStr).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+
+  // Horas ya ocupadas por otras citas de la clínica en la fecha seleccionada
+  const bookedHoursOnDate = useMemo(() => {
+    return new Set(
+      all
+        .filter((a) => a.date === date && a.status !== "Cancelada" && a.id !== rescheduleId)
+        .map((a) => a.time)
+    );
+  }, [all, date, rescheduleId]);
+
+  // Cálculo en tiempo real de slots disponibles según horario de la clínica
+  const now = new Date();
+  const currentHourStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const isPastDate = date < todayStr;
+  const isToday = date === todayStr;
+
+  const availableHours = useMemo(() => {
+    if (isPastDate) return [];
+    if (isToday) {
+      return STANDARD_HOURS.filter((h) => h > currentHourStr && !bookedHoursOnDate.has(h));
+    }
+    return STANDARD_HOURS.filter((h) => !bookedHoursOnDate.has(h));
+  }, [isPastDate, isToday, currentHourStr, bookedHoursOnDate]);
+
+  // Si la hora seleccionada no está disponible en la fecha, auto-seleccionar la primera disponible
+  useEffect(() => {
+    if (availableHours.length > 0) {
+      if (!time || !availableHours.includes(time)) {
+        setTime(availableHours[0]);
+      }
+    } else {
+      setTime("");
+    }
+  }, [availableHours, time]);
 
   const resetForm = () => {
     setPetId(myPets[0]?.id ?? "");
-    setDate(new Date().toISOString().split("T")[0]);
-    setTime("09:00");
+    setDate(todayStr);
+    setTime(availableHours[0] || "");
     setReason("");
     setRescheduleId(null);
   };
@@ -76,12 +117,20 @@ function PortalAgendaPage() {
   const openReschedule = (id: string) => {
     const appt = all.find((a) => a.id === id);
     if (!appt) return;
-    setPetId(appt.petId); setDate(appt.date); setTime(appt.time); setReason(appt.reason);
-    setRescheduleId(id); setDialogOpen(true);
+    setPetId(appt.petId);
+    setDate(appt.date);
+    setTime(appt.time);
+    setReason(appt.reason);
+    setRescheduleId(id);
+    setDialogOpen(true);
   };
 
   const submit = () => {
     if (!petId || !reason) { toast.error("Selecciona mascota y motivo"); return; }
+    if (!time || !availableHours.includes(time)) {
+      toast.error("Por favor selecciona un horario disponible de la clínica");
+      return;
+    }
     if (rescheduleId) {
       updateAppointment(rescheduleId, { date, time, reason, status: "Pendiente" });
       toast.success("Cita reprogramada");
@@ -164,38 +213,105 @@ function PortalAgendaPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{rescheduleId ? "Reprogramar cita" : "Solicitar nueva cita"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4 pt-1">
             <div>
               <Label>Mascota</Label>
               <Select value={petId} onValueChange={setPetId}>
-                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona mascota" /></SelectTrigger>
                 <SelectContent>
                   {myPets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Fecha</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <Input
+                  type="date"
+                  min={todayStr}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
               </div>
               <div>
-                <Label>Hora</Label>
-                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                <Label>Hora disponible</Label>
+                <Select
+                  value={time}
+                  onValueChange={setTime}
+                  disabled={availableHours.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={availableHours.length === 0 ? "Sin turnos" : "Selecciona hora"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableHours.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h} hrs
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* Turnos disponibles de la clínica */}
+            {availableHours.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    Horarios disponibles ({availableHours.length})
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">Selecciona un turno</span>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-36 overflow-y-auto p-2 bg-muted/40 rounded-lg border border-border/60">
+                  {availableHours.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => setTime(h)}
+                      className={cn(
+                        "px-2 py-1.5 rounded-md text-xs font-medium border transition-all text-center",
+                        time === h
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold scale-105"
+                          : "bg-background hover:bg-muted text-foreground border-border/70 hover:border-primary/50"
+                      )}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>No hay turnos disponibles para esta fecha. Por favor selecciona otro día.</span>
+              </div>
+            )}
+
             <div>
               <Label>Motivo</Label>
-              <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej: Control anual, vacunación..." />
+              <Textarea
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Ej: Control anual, vacunación, desparasitación..."
+              />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={submit}>{rescheduleId ? "Reprogramar" : "Solicitar"}</Button>
+            <Button
+              onClick={submit}
+              disabled={availableHours.length === 0 || !time || !petId}
+            >
+              {rescheduleId ? "Reprogramar" : "Solicitar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

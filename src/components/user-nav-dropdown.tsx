@@ -76,6 +76,11 @@ export function UserNavDropdown({ className }: { className?: string }) {
             <div className="font-bold text-sm text-foreground truncate leading-tight">
               {displayName}
             </div>
+            {user.email && (
+              <div className="text-[11px] text-muted-foreground truncate" title={user.email}>
+                {user.email}
+              </div>
+            )}
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">
               {roleDisplay}
             </div>

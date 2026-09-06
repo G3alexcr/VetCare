@@ -90,6 +90,36 @@ export type ClinicUser = {
   active: boolean;
 };
 
+export const DEFAULT_CLINIC_ID = "00000000-0000-0000-0000-0000000000a1";
+
+export const SEED_CLINICS: Clinic[] = [
+  {
+    id: DEFAULT_CLINIC_ID,
+    name: "VetCare San José",
+    legalName: "VetCare S.A.",
+    taxId: "310112345678",
+    email: "contacto@vetcare.com",
+    phone: "+506 2222 3344",
+    whatsapp: "+506 8811 2233",
+    address: "San José, Costa Rica",
+    city: "San José",
+    country: "Costa Rica",
+    logoUrl: "",
+    timezone: "America/Costa_Rica",
+    currency: "CRC",
+    brandColor: "#0ea5e9",
+    subscriptionPlanId: "00000000-0000-0000-0000-000000000002",
+    subscriptionStatus: "Activa",
+    openingHours: "Lun-Sáb 08:00-19:00",
+    specialties: ["Medicina General", "Cirugía", "Odontología", "Vacunación"],
+    socials: {},
+    createdAt: "2024-01-01T00:00:00.000Z",
+    aiProvider: "openai",
+    aiModel: "gpt-4o-mini",
+    emergencyPhone: "+506 2222-9999",
+  },
+];
+
 type State = {
   clinics: Clinic[];
   plans: SubscriptionPlan[];
@@ -101,12 +131,12 @@ type State = {
 };
 
 let state: State = {
-  clinics: [],
+  clinics: SEED_CLINICS,
   plans: [],
   subscriptions: [],
   branches: [],
   users: [],
-  currentClinicId: "",
+  currentClinicId: DEFAULT_CLINIC_ID,
   actingClinicId: null,
 };
 
@@ -232,7 +262,8 @@ export async function hydrateSaas(clinicId: string): Promise<void> {
     db.from("plans").select("*"),
     db.from("clinic_members").select("*"),
   ]);
-  const clinics = (clinicsRes.data ?? []).map(mapClinic);
+  const rawClinics = (clinicsRes.data ?? []).map(mapClinic);
+  const clinics = rawClinics.length > 0 ? rawClinics : SEED_CLINICS;
   const plans = (plansRes.data ?? []).map(mapPlan);
   const users = mapUsers(membersRes.data ?? []);
   const subscriptions = clinics.map(deriveSubscription);
@@ -241,7 +272,7 @@ export async function hydrateSaas(clinicId: string): Promise<void> {
   setState((s) => {
     const current = s.currentClinicId && clinics.some((c) => c.id === s.currentClinicId)
       ? s.currentClinicId
-      : clinics[0]?.id ?? "";
+      : clinics[0]?.id ?? DEFAULT_CLINIC_ID;
     const acting = s.actingClinicId && clinics.some((c) => c.id === s.actingClinicId)
       ? s.actingClinicId
       : s.actingClinicId;

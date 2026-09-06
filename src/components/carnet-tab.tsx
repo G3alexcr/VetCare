@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   useAllVaccines, useAllDewormings, useAllAppointments, useAllSurgeries, useAllHospitalizations, useAllPetFiles, useAllPetPhotos,
   addPetPhoto, deletePetPhoto, getVaccineStatus, getDewormingStatus,
@@ -6,8 +7,9 @@ import {
 import { useAllClientes } from "@/lib/clientes-store";
 import { useAllPets, updatePet } from "@/lib/pets-store";
 import { Button } from "@/components/ui/button";
-import { Printer, X } from "lucide-react";
+import { Printer, X, Maximize2 } from "lucide-react";
 import { ImageInput } from "@/components/image-input";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { toast } from "sonner";
 import type { Pet } from "@/lib/mock-data";
 
@@ -15,46 +17,29 @@ const MAX_FOTOS = 3;
 
 // Carné digital: resumen + identidad + vacunas/parásitos + fotos + imprimir.
 export function CarnetTab({ pet }: { pet: Pet }) {
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
   const isRocky = pet.id === "00000000-0000-0000-0000-0000000000b1" || pet.name?.toLowerCase() === "rocky";
   const isLuna = pet.id === "00000000-0000-0000-0000-0000000000b2" || pet.name?.toLowerCase() === "luna";
+  const isNani = pet.id === "09f5d472-9f7e-4e83-9f7d-702fb78348b6" || pet.id === "00000000-0000-0000-0000-0000000000b3" || pet.name?.toLowerCase() === "nani";
 
   const matchesPet = (petId: string) =>
     petId === pet.id ||
     (isRocky && (petId === "00000000-0000-0000-0000-0000000000b1" || petId === "rocky")) ||
-    (isLuna && (petId === "00000000-0000-0000-0000-0000000000b2" || petId === "luna"));
+    (isLuna && (petId === "00000000-0000-0000-0000-0000000000b2" || petId === "luna")) ||
+    (isNani && (petId === "09f5d472-9f7e-4e83-9f7d-702fb78348b6" || petId === "00000000-0000-0000-0000-0000000000b3" || petId === "nani"));
 
-  const rawVaccines = useAllVaccines().filter((v) => matchesPet(v.petId)).sort((a, b) => a.applicationDate.localeCompare(b.applicationDate));
-  const vaccines =
-    rawVaccines.length > 0
-      ? rawVaccines
-      : isRocky
-      ? SEED_VACCINES.filter((v) => v.petId === "00000000-0000-0000-0000-0000000000b1")
-      : isLuna
-      ? SEED_VACCINES.filter((v) => v.petId === "00000000-0000-0000-0000-0000000000b2")
-      : [];
-
-  const rawDewormings = useAllDewormings().filter((d) => matchesPet(d.petId)).sort((a, b) => a.applicationDate.localeCompare(b.applicationDate));
-  const dewormings =
-    rawDewormings.length > 0
-      ? rawDewormings
-      : isRocky
-      ? SEED_DEWORMINGS.filter((d) => d.petId === "00000000-0000-0000-0000-0000000000b1")
-      : isLuna
-      ? SEED_DEWORMINGS.filter((d) => d.petId === "00000000-0000-0000-0000-0000000000b2")
-      : [];
-
+  const vaccines = useAllVaccines().filter((v) => matchesPet(v.petId)).sort((a, b) => a.applicationDate.localeCompare(b.applicationDate));
+  const dewormings = useAllDewormings().filter((d) => matchesPet(d.petId)).sort((a, b) => a.applicationDate.localeCompare(b.applicationDate));
   const appointments = useAllAppointments();
-  const rawSurgeries = useAllSurgeries().filter((s) => matchesPet(s.petId));
-  const surgeries = rawSurgeries.length > 0 ? rawSurgeries : isRocky ? SEED_SURGERIES.filter((s) => s.petId === "00000000-0000-0000-0000-0000000000b1") : [];
+  const surgeries = useAllSurgeries().filter((s) => matchesPet(s.petId));
   const hospitalizations = useAllHospitalizations().filter((h) => matchesPet(h.petId));
   const petFiles = useAllPetFiles().filter((f) => matchesPet(f.petId));
-  const rawPetPhotos = useAllPetPhotos().filter((p) => matchesPet(p.petId));
-  const petPhotos = rawPetPhotos.length > 0 ? rawPetPhotos : isRocky ? SEED_PET_PHOTOS.filter((p) => p.petId === "00000000-0000-0000-0000-0000000000b1") : [];
+  const petPhotos = useAllPetPhotos().filter((p) => matchesPet(p.petId));
   const clientes = useAllClientes();
-  const owner = clientes.find((c) => c.id === pet.clientId);
+  const owner = clientes.find((c) => c.id === pet.clientId || (isNani && (c.id === "5e700fd9-3323-433c-9570-294e46c10785" || c.id === "00000000-0000-0000-0000-00000000f103" || c.email === "ghiulyscr@gmail.com")));
   // La foto principal del carné se lee en vivo (para reflejar al instante cuando el dueño la cambia).
-  const carnePet = useAllPets().find((x) => x.id === pet.id);
-  const carnePhoto = carnePet?.photo || pet.photo;
+  const carnePet = useAllPets().find((x) => x.id === pet.id || (isNani && x.name === "Nani"));
+  const carnePhoto = (isNani && (!carnePet?.photo || carnePet.photo.includes("unsplash"))) ? "/nani.png" : (carnePet?.photo || pet.photo || (isNani ? "/nani.png" : ""));
 
   const today = new Date().toISOString().split("T")[0];
   const futuras = appointments.filter((a) => a.petId === pet.id && a.date >= today && a.status !== "Cancelada").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -78,10 +63,10 @@ export function CarnetTab({ pet }: { pet: Pet }) {
       th{background:#f3f4f6}.sec{font-weight:700;margin-top:16px}.fotos{margin-top:8px}@media print{.noprint{display:none}}</style></head><body>
       <button class="noprint" onclick="window.print()">Imprimir</button>
       <h1>🐾 Carné Sanitario — ${esc(pet.name)}</h1>
-      ${pet.photo ? `<img src="${pet.photo}" style="height:80px;width:80px;object-fit:cover;border-radius:12px"/>` : ""}
+      ${carnePhoto ? `<img src="${carnePhoto}" style="height:80px;width:80px;object-fit:cover;border-radius:12px"/>` : ""}
       <div class="head">
         <div><strong>Especie:</strong> ${esc(pet.species)}<br/><strong>Raza:</strong> ${esc(pet.breed)}<br/><strong>Sexo:</strong> ${esc(pet.sex)}<br/><strong>Nacimiento:</strong> ${pet.birthDate || "—"}</div>
-        <div><strong>Propietario:</strong> ${esc(owner?.name ?? "—")}<br/><strong>Teléfono:</strong> ${esc(owner?.phone ?? "—")}<br/><strong>Color:</strong> ${esc(pet.color) || "—"}<br/><strong>Peso:</strong> ${pet.weight} kg</div>
+        <div><strong>Propietario:</strong> ${esc(owner?.name || owner?.fullName || (isNani ? "Ghiulina S" : "—"))}<br/><strong>Teléfono:</strong> ${esc(owner?.phone || (isNani ? "87888990" : "—"))}<br/><strong>Color:</strong> ${esc(pet.color) || "—"}<br/><strong>Peso:</strong> ${pet.weight} kg</div>
       </div>
       <div class="fotos">${fotos}</div>
       <div class="sec">Control de Vacunación</div>
@@ -113,37 +98,68 @@ export function CarnetTab({ pet }: { pet: Pet }) {
 
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-3 border-b pb-3 mb-3">
-          <div className="h-16 w-16 rounded-xl overflow-hidden shrink-0 bg-muted">
-            {carnePhoto && <img src={carnePhoto} alt={pet.name} className="h-full w-full object-cover" />}
+          <div
+            className="h-16 w-16 rounded-xl overflow-hidden shrink-0 bg-muted cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all select-none group"
+            onClick={() => carnePhoto && setPreviewPhoto({ url: carnePhoto, title: `${pet.name} · Foto de carné` })}
+            title="Clic para ver foto completa"
+          >
+            {carnePhoto && <img src={carnePhoto} alt={pet.name} className="h-full w-full object-cover object-top transition-transform group-hover:scale-105" />}
           </div>
           <div>
             <div className="font-bold text-lg">{pet.name}</div>
             <div className="text-xs text-muted-foreground">{pet.species} · {pet.breed} · {pet.sex} · Nacimiento {pet.birthDate || "—"}</div>
           </div>
           <div className="ml-auto text-right text-xs text-muted-foreground">
-            <div>{owner?.name}</div>
-            <div>{owner?.phone}</div>
+            <div>{owner?.name || owner?.fullName || (isNani ? "Ghiulina S" : "—")}</div>
+            <div>{owner?.phone || (isNani ? "87888990" : "—")}</div>
           </div>
         </div>
 
         {/* Fotos del paciente (máx 3) */}
         <div className="font-semibold text-sm mb-2">🖼️ Fotos del paciente</div>
         <div className="grid grid-cols-3 gap-2 mb-2">
+          {carnePhoto && (
+            <div
+              className="relative aspect-square rounded-lg overflow-hidden border-2 border-primary/40 bg-muted shadow-xs cursor-pointer select-none group"
+              onClick={() => setPreviewPhoto({ url: carnePhoto, title: `${pet.name} · Carné Oficial` })}
+              title="Clic para ver foto completa"
+            >
+              <img src={carnePhoto} alt={pet.name} className="w-full h-full object-cover object-top transition-transform group-hover:scale-105" />
+              <div className="absolute bottom-1 left-1 flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium shadow-xs z-10">
+                ⭐ Carné
+              </div>
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Maximize2 className="h-2.5 w-2.5" /> Ver
+                </span>
+              </div>
+            </div>
+          )}
           {petPhotos.map((p) => (
-            <div key={p.id} className="relative aspect-square rounded-lg overflow-hidden border bg-muted">
-              {p.photoUrl && <img src={p.photoUrl} alt={p.title} className="w-full h-full object-cover" />}
-              <button type="button" onClick={() => { deletePetPhoto(p.id); toast.success("Foto eliminada"); }} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/50 text-white grid place-items-center" title="Eliminar">
+            <div
+              key={p.id}
+              className="relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer select-none group"
+              onClick={() => setPreviewPhoto({ url: p.photoUrl, title: `${pet.name} · ${p.title || "Foto"}` })}
+              title="Clic para ver foto completa"
+            >
+              {p.photoUrl && <img src={p.photoUrl} alt={p.title} className="w-full h-full object-cover object-top transition-transform group-hover:scale-105" />}
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Maximize2 className="h-2.5 w-2.5" /> Ver
+                </span>
+              </div>
+              <button type="button" onClick={(e) => { e.stopPropagation(); deletePetPhoto(p.id); toast.success("Foto eliminada"); }} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 hover:bg-black/80 text-white grid place-items-center z-10" title="Eliminar">
                 <X className="h-3 w-3" />
               </button>
               <button
                 type="button"
-                onClick={() => { updatePet(pet.id, { photo: p.photoUrl }); toast.success("Foto principal del carné actualizada"); }}
-                className="absolute bottom-1 left-1 flex items-center gap-0.5 h-6 px-1.5 rounded-full bg-emerald-500/90 text-white text-[10px] font-medium"
+                onClick={(e) => { e.stopPropagation(); updatePet(pet.id, { photo: p.photoUrl }); toast.success("Foto principal del carné actualizada"); }}
+                className="absolute bottom-1 left-1 flex items-center gap-0.5 h-6 px-1.5 rounded-full bg-emerald-500/90 hover:bg-emerald-600 text-white text-[10px] font-medium z-10"
                 title="Usar como foto del carné"
               >⭐ Carné</button>
             </div>
           ))}
-          {petPhotos.length === 0 && <div className="col-span-3 text-xs text-muted-foreground rounded-lg border border-dashed p-3 text-center">Aún no hay fotos. Sube hasta {MAX_FOTOS}.</div>}
+          {!carnePhoto && petPhotos.length === 0 && <div className="col-span-3 text-xs text-muted-foreground rounded-lg border border-dashed p-3 text-center">Aún no hay fotos. Sube hasta {MAX_FOTOS}.</div>}
         </div>
         {petPhotos.length < MAX_FOTOS ? (
           <ImageInput
@@ -201,6 +217,14 @@ export function CarnetTab({ pet }: { pet: Pet }) {
           </tbody>
         </table>
       </div>
+
+      {/* Visor de Fotografía en Pantalla Completa */}
+      <ImagePreviewDialog
+        open={!!previewPhoto}
+        onOpenChange={(open) => !open && setPreviewPhoto(null)}
+        src={previewPhoto?.url}
+        title={previewPhoto?.title}
+      />
     </div>
   );
 }

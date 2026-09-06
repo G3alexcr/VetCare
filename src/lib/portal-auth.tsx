@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { type Client } from "./mock-data";
 import { getAllClientes } from "./clientes-store";
+import { db } from "./supabase";
 
 type Ctx = {
   owner: Client | null;
   ready: boolean;
-  login: (email: string, password: string) => { ok: boolean; error?: string };
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   updateOwner: (patch: Partial<Client>) => void;
 };
@@ -35,6 +36,17 @@ const KNOWN_DEMO_CLIENTS: Record<string, Client> = {
     registeredAt: "2024-02-10",
     notes: "",
   },
+  "ghiulyscr@gmail.com": {
+    id: "5e700fd9-3323-433c-9570-294e46c10785",
+    fullName: "Ghiulina S",
+    identification: "987654321",
+    phone: "87888990",
+    whatsapp: "87888990",
+    email: "ghiulyscr@gmail.com",
+    address: "Heredia Costa Rica",
+    registeredAt: "2026-09-06",
+    notes: "Tutor(a) de Nani",
+  },
 };
 
 export function PortalAuthProvider({ children }: { children: ReactNode }) {
@@ -46,14 +58,14 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(saved);
         if (parsed.email && KNOWN_DEMO_CLIENTS[parsed.email.toLowerCase()]) {
           const matched = KNOWN_DEMO_CLIENTS[parsed.email.toLowerCase()];
-          const healed = { ...matched, ...parsed, id: matched.id };
+          const healed = { ...matched, ...parsed, id: matched.id, fullName: matched.fullName };
           localStorage.setItem("vetcare_portal_owner", JSON.stringify(healed));
           return healed;
         }
         return parsed;
       } catch {}
     }
-    return KNOWN_DEMO_CLIENTS["maria@gmail.com"];
+    return null;
   });
   const [ready, setReady] = useState(false);
 
@@ -61,11 +73,36 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
-  const login = (email: string, _password: string) => {
-    const found = getAllClientes().find((c) => c.email.toLowerCase() === email.toLowerCase());
-    const fallback = KNOWN_DEMO_CLIENTS[email.toLowerCase()];
-    if (!found && !fallback) return { ok: false, error: "Propietario no encontrado" };
-    // Construye el owner con la forma de `Client` a partir del Cliente de la DB o fallback.
+  const login = async (email: string, _password: string): Promise<{ ok: boolean; error?: string }> => {
+    const clean = email.trim().toLowerCase();
+    let found = getAllClientes().find((c) => c.email.toLowerCase() === clean);
+    if (!found) {
+      try {
+        const { data } = await db.from("clients").select("*").ilike("email", clean).limit(1);
+        if (data && data.length > 0) {
+          const r = data[0] as Record<string, unknown>;
+          const name = String((r.full_name || r.name) ?? "");
+          found = {
+            id: String(r.id),
+            name,
+            fullName: name,
+            identification: String(r.identification ?? ""),
+            phone: String(r.phone ?? ""),
+            whatsapp: String(r.whatsapp ?? ""),
+            email: String(r.email ?? ""),
+            address: String(r.address ?? ""),
+            registeredAt: String(r.registered_at ?? ""),
+            notes: String(r.notes ?? ""),
+            clinicId: String(r.clinic_id ?? ""),
+            createdAt: String(r.created_at ?? ""),
+          };
+        }
+      } catch (e) {
+        console.error("Error buscando cliente en Supabase:", e);
+      }
+    }
+
+    const fallback = KNOWN_DEMO_CLIENTS[clean];
     const client: Client = found
       ? {
           id: found.id,
@@ -78,7 +115,18 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
           registeredAt: found.registeredAt,
           notes: found.notes,
         }
-      : fallback!;
+      : fallback || {
+          id: crypto.randomUUID(),
+          fullName: clean.split("@")[0],
+          identification: "",
+          phone: "",
+          whatsapp: "",
+          email: clean,
+          address: "",
+          registeredAt: new Date().toISOString().split("T")[0],
+          notes: "Propietario registrado",
+        };
+
     setOwner(client);
     try {
       localStorage.setItem("vetcare_portal_owner", JSON.stringify(client));

@@ -50,13 +50,38 @@ export const SEED_CLIENTES: ClinicClient[] = [
     clinicId: "00000000-0000-0000-0000-0000000000a1",
     createdAt: "2024-02-10T11:00:00.000Z",
   },
+  {
+    id: "5e700fd9-3323-433c-9570-294e46c10785",
+    name: "Ghiulina S",
+    fullName: "Ghiulina S",
+    identification: "987654321",
+    phone: "87888990",
+    whatsapp: "87888990",
+    email: "ghiulyscr@gmail.com",
+    address: "Heredia Costa Rica",
+    registeredAt: "2026-09-06",
+    notes: "Tutor(a) de Nani",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    createdAt: "2026-09-06T05:36:53.346+00:00",
+  },
 ];
 
-let state: ClinicClient[] = SEED_CLIENTES;
+// Purge any legacy localStorage cache so stale client data never pollutes memory
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("vetcare_cached_clientes");
+  } catch {}
+}
+
+let state: ClinicClient[] = [...SEED_CLIENTES];
+
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
 const emit = () => listeners.forEach((l) => l());
-const set = (updater: (s: ClinicClient[]) => ClinicClient[]) => { state = updater(state); emit(); };
+const set = (updater: (s: ClinicClient[]) => ClinicClient[]) => {
+  state = updater(state);
+  emit();
+};
 
 export const getAllClientes = () => state;
 export const useAllClientes = () => useSyncExternalStore(subscribe, getAllClientes, getAllClientes);
@@ -85,9 +110,12 @@ export async function hydrateClientes(_clinicId: string): Promise<void> {
   const { data, error } = await db.from("clients").select("*");
   if (error) { console.error(error); return; }
   const rows = (data ?? []).map(mapCliente);
-  const ids = new Set(rows.map((c) => c.id));
-  const missing = SEED_CLIENTES.filter((c) => !ids.has(c.id));
-  set(() => [...rows, ...missing]);
+  const dbIds = new Set(rows.map((c) => c.id));
+  const dbEmails = new Set(rows.map((c) => c.email?.trim().toLowerCase()).filter(Boolean));
+  const missingSeeds = SEED_CLIENTES.filter(
+    (c) => !dbIds.has(c.id) && !dbEmails.has(c.email?.trim().toLowerCase())
+  );
+  set(() => [...rows, ...missingSeeds]);
 }
 registerHydrator(hydrateClientes);
 

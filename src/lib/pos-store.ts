@@ -328,8 +328,195 @@ function mapOrder(r: DbRow, items: PosOrderItem[]): PosOrder {
 }
 
 // ---------------------------------------------------------------------------
-// Estado
+// Estado y Seeds
 // ---------------------------------------------------------------------------
+export const SEED_POS_CATEGORIES: PosCategory[] = [
+  {
+    id: "00000000-0000-0000-0000-0000000000c1",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    nombre: "Medicamentos",
+    descripcion: "Farmacología y tratamientos veterinarios.",
+    color: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+    estado: "Activo",
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000c2",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    nombre: "Vacunas",
+    descripcion: "Biológicos e inmunización preventiva.",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+    estado: "Activo",
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000c3",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    nombre: "Alimentos y Nutrición",
+    descripcion: "Alimentos medicados, premium y snacks.",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    estado: "Activo",
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000c4",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    nombre: "Antiparasitarios y Pipetas",
+    descripcion: "Control de pulgas, garrapatas y parásitos internos.",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
+    estado: "Activo",
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-0000000000c5",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    nombre: "Accesorios e Higiene",
+    descripcion: "Shampoo, collares, correas y bienestar.",
+    color: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+    estado: "Activo",
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+];
+
+export const SEED_POS_PRODUCTS: PosProduct[] = [
+  {
+    id: "00000000-0000-0000-0000-00000000f001",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c1",
+    code: "MED-001",
+    barcode: "7861234500011",
+    name: "Amoxicilina + Ácido Clavulánico 500mg",
+    price: 4500,
+    cost: 3200,
+    stock: 45,
+    minStock: 10,
+    unit: "caja",
+    image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f002",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c2",
+    code: "VAC-001",
+    barcode: "7861234500028",
+    name: "Vacuna Antirrábica Nobivac Rabies",
+    price: 12000,
+    cost: 6500,
+    stock: 30,
+    minStock: 10,
+    unit: "dosis",
+    image: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f003",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c3",
+    code: "ALI-001",
+    barcode: "7861234500042",
+    name: "Royal Canin Mini Adult 7.5kg",
+    price: 34500,
+    cost: 25000,
+    stock: 18,
+    minStock: 5,
+    unit: "saco",
+    image: "https://images.unsplash.com/photo-1589924691995-400dc9ecc119?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f004",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c4",
+    code: "ANT-001",
+    barcode: "7861234500059",
+    name: "NexGard Spectra Perros (7.5 a 15 kg)",
+    price: 14500,
+    cost: 9500,
+    stock: 25,
+    minStock: 8,
+    unit: "comprimido",
+    image: "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f005",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c4",
+    code: "ANT-002",
+    barcode: "7861234500066",
+    name: "Bravecto Masticable 10-20 kg (12 semanas)",
+    price: 22000,
+    cost: 15000,
+    stock: 20,
+    minStock: 6,
+    unit: "comprimido",
+    image: "https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f006",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c3",
+    code: "ALI-002",
+    barcode: "7861234500073",
+    name: "Pro Plan Sensitive Skin & Stomach 15kg",
+    price: 54000,
+    cost: 41000,
+    stock: 12,
+    minStock: 4,
+    unit: "saco",
+    image: "https://images.unsplash.com/photo-1568640347023-a616a30bc3bd?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f007",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c5",
+    code: "HIG-001",
+    barcode: "7861234500080",
+    name: "Shampoo Antiséptico Clorhexidina 250ml",
+    price: 8500,
+    cost: 4800,
+    stock: 35,
+    minStock: 10,
+    unit: "frasco",
+    image: "https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000f008",
+    clinicId: "00000000-0000-0000-0000-0000000000a1",
+    categoryId: "00000000-0000-0000-0000-0000000000c5",
+    code: "HIG-002",
+    barcode: "7861234500097",
+    name: "Snack Dental Pedigree Dentastix Raza Pequeña",
+    price: 4200,
+    cost: 2600,
+    stock: 50,
+    minStock: 15,
+    unit: "paquete",
+    image: "https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=500",
+    estado: "Activo",
+    online: true,
+    createdAt: "2024-01-01T00:00:00Z",
+  },
+];
+
 type PosState = {
   categories: PosCategory[];
   products: PosProduct[];
@@ -342,23 +529,48 @@ type PosState = {
   orderCounter: number;
 };
 
-let saleCounter = 1000;
-let orderCounter = 0;
+const POS_STORAGE_KEY = "vetcare_cached_pos_v2";
+
+function loadCachedPos(): Partial<PosState> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(POS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedPos(s: PosState) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(s));
+  } catch {}
+}
+
+const initialCachedPos = loadCachedPos();
+
+let saleCounter = initialCachedPos?.saleCounter ?? 1000;
+let orderCounter = initialCachedPos?.orderCounter ?? 0;
 let state: PosState = {
-  categories: [],
-  products: [],
-  movements: [],
-  sales: [],
-  orders: [],
-  sessions: [],
-  cashMovements: [],
+  categories: initialCachedPos?.categories?.length ? initialCachedPos.categories : SEED_POS_CATEGORIES,
+  products: initialCachedPos?.products?.length ? initialCachedPos.products : SEED_POS_PRODUCTS,
+  movements: initialCachedPos?.movements ?? [],
+  sales: initialCachedPos?.sales ?? [],
+  orders: initialCachedPos?.orders ?? [],
+  sessions: initialCachedPos?.sessions ?? [],
+  cashMovements: initialCachedPos?.cashMovements ?? [],
   saleCounter,
   orderCounter,
 };
 
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
-const set = (updater: (s: PosState) => PosState) => { state = updater(state); listeners.forEach((l) => l()); };
+const set = (updater: (s: PosState) => PosState) => {
+  state = updater(state);
+  saveCachedPos(state);
+  listeners.forEach((l) => l());
+};
 
 // ---------------------------------------------------------------------------
 // Hidratación desde Supabase (RLS filtra por las clínicas accesibles)
@@ -377,11 +589,31 @@ export async function hydratePos(_clinicId: string): Promise<void> {
       db.from("order_items").select("*"),
     ]);
 
-  const categories = (categoriesRes.data ?? []).map(mapCategory);
-  const products = (productsRes.data ?? []).map(mapProduct);
-  const movements = (movementsRes.data ?? []).map(mapMovement);
-  const sessions = (sessionsRes.data ?? []).map(mapSession);
-  const cashMovements = (cashMovementsRes.data ?? []).map(mapCashMovement);
+  const rawCategories = (categoriesRes.data ?? []).map(mapCategory);
+  const rawProducts = (productsRes.data ?? []).map(mapProduct);
+  const rawMovements = (movementsRes.data ?? []).map(mapMovement);
+  const rawSessions = (sessionsRes.data ?? []).map(mapSession);
+  const rawCashMovements = (cashMovementsRes.data ?? []).map(mapCashMovement);
+
+  const cached = loadCachedPos();
+
+  // Merge categories: Supabase > Cache > Seed
+  const catMap = new Map<string, PosCategory>();
+  SEED_POS_CATEGORIES.forEach((c) => catMap.set(c.id, c));
+  (cached?.categories ?? []).forEach((c) => catMap.set(c.id, c));
+  rawCategories.forEach((c) => catMap.set(c.id, c));
+  const categories = Array.from(catMap.values());
+
+  // Merge products: Supabase > Cache > Seed
+  const prodMap = new Map<string, PosProduct>();
+  SEED_POS_PRODUCTS.forEach((p) => prodMap.set(p.id, p));
+  (cached?.products ?? []).forEach((p) => prodMap.set(p.id, p));
+  rawProducts.forEach((p) => prodMap.set(p.id, p));
+  const products = Array.from(prodMap.values());
+
+  const movements = rawMovements.length > 0 ? rawMovements : (cached?.movements ?? []);
+  const sessions = rawSessions.length > 0 ? rawSessions : (cached?.sessions ?? []);
+  const cashMovements = rawCashMovements.length > 0 ? rawCashMovements : (cached?.cashMovements ?? []);
 
   // Agrupar items hijos por su padre.
   const saleItemsBySale: Record<string, SaleItem[]> = {};
@@ -389,14 +621,16 @@ export async function hydratePos(_clinicId: string): Promise<void> {
     const sid = String(raw.sale_id ?? "");
     (saleItemsBySale[sid] ??= []).push(mapSaleItem(raw));
   }
-  const sales = (salesRes.data ?? []).map((r) => mapSale(r, saleItemsBySale[String(r.id)] ?? []));
+  const rawSales = (salesRes.data ?? []).map((r) => mapSale(r, saleItemsBySale[String(r.id)] ?? []));
+  const sales = rawSales.length > 0 ? rawSales : (cached?.sales ?? []);
 
   const orderItemsByOrder: Record<string, PosOrderItem[]> = {};
   for (const raw of orderItemsRes.data ?? []) {
     const oid = String(raw.order_id ?? "");
     (orderItemsByOrder[oid] ??= []).push(mapOrderItem(raw));
   }
-  const orders = (ordersRes.data ?? []).map((r) => mapOrder(r, orderItemsByOrder[String(r.id)] ?? []));
+  const rawOrders = (ordersRes.data ?? []).map((r) => mapOrder(r, orderItemsByOrder[String(r.id)] ?? []));
+  const orders = rawOrders.length > 0 ? rawOrders : (cached?.orders ?? []);
 
   // Renumerar a partir del mayor sufijo numérico ya persistido.
   const stripPrefix = (number: string, prefix: string): number => {

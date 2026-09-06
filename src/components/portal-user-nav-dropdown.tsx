@@ -67,6 +67,11 @@ export function PortalUserNavDropdown({ className }: { className?: string }) {
             <div className="font-bold text-sm text-foreground truncate leading-tight">
               {owner.fullName}
             </div>
+            {owner.email && (
+              <div className="text-[11px] text-muted-foreground truncate" title={owner.email}>
+                {owner.email}
+              </div>
+            )}
             <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-0.5">
               PROPIETARIO DE MASCOTA
             </div>

@@ -27,20 +27,37 @@ const ROLE_MAP: Record<string, User["role"]> = {
   Asistente: "vet",
 };
 
-async function loadAppUser(sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): Promise<User> {
-  let role: User["role"] = "vet";
+async function loadAppUser(sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): Promise<User | null> {
+  const email = (sessionUser.email || "").toLowerCase().trim();
+
+  // 1. Superadmin explícito o metadata
+  if (email.includes("superadmin") || sessionUser.user_metadata?.role === "super") {
+    return {
+      id: sessionUser.id,
+      name: (sessionUser.user_metadata?.name as string) ?? email,
+      email,
+      role: "super",
+    };
+  }
+
+  // 2. Consulta en clinic_members para verificar si pertenece al staff clínico
   try {
     const { data } = await db.from("clinic_members").select("role").eq("user_id", sessionUser.id).limit(1);
-    role = ROLE_MAP[(data?.[0] as { role?: string } | undefined)?.role ?? ""] ?? "vet";
-  } catch {
-    /* sin rol vinculado */
+    if (data && data.length > 0 && data[0]?.role) {
+      const mappedRole = ROLE_MAP[data[0].role] || "admin";
+      return {
+        id: sessionUser.id,
+        name: (sessionUser.user_metadata?.name as string) ?? email ?? "Staff",
+        email,
+        role: mappedRole,
+      };
+    }
+  } catch (e) {
+    console.error("Error buscando rol en clinic_members:", e);
   }
-  return {
-    id: sessionUser.id,
-    name: (sessionUser.user_metadata?.name as string) ?? sessionUser.email ?? "Usuario",
-    email: sessionUser.email ?? "",
-    role,
-  };
+
+  // 3. Si no tiene membresía en clinic_members ni es superadmin: NO ES PERSONAL CLÍNICO
+  return null;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -108,6 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) return { ok: false, error: error?.message ?? "Error de autenticación" };
     const appUser = await loadAppUser(data.user);
+    if (!appUser) {
+      // El usuario existe en Supabase pero no es personal de clínica (es cliente / tutor)
+      return { ok: false, isClientOnly: true, error: "Usuario sin rol clínico asignado." };
+    }
     setUser(appUser);
     return { ok: true, user: appUser };
   };

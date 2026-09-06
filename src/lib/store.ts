@@ -29,40 +29,26 @@ export const STANDARD_HOURS = [
 export function getLocalAppts(): TenantAppointment[] {
   if (typeof window === "undefined") return [];
   try {
-    if (localStorage.getItem("go2vet_appointments_v1")) {
-      localStorage.removeItem("go2vet_appointments_v1");
-    }
-    const raw = localStorage.getItem("go2vet_appointments_v2");
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+    localStorage.removeItem("go2vet_appointments_v1");
+    localStorage.removeItem("go2vet_appointments_v2");
+  } catch {}
+  return [];
 }
 
-export function saveLocalAppt(item: TenantAppointment) {
-  if (typeof window === "undefined") return;
-  try {
-    const current = getLocalAppts().filter((x) => x.id !== item.id);
-    localStorage.setItem("go2vet_appointments_v2", JSON.stringify([item, ...current]));
-  } catch {}
+export function saveLocalAppt(_item: TenantAppointment) {
+  // Sin almacenamiento local para garantizar datos limpios desde la base de datos
 }
 
 export function getLocalConsults(): LinkedConsultation[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem("go2vet_consultations_v1");
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+    localStorage.removeItem("go2vet_consultations_v1");
+  } catch {}
+  return [];
 }
 
-export function saveLocalConsult(item: LinkedConsultation) {
-  if (typeof window === "undefined") return;
-  try {
-    const current = getLocalConsults().filter((x) => x.id !== item.id);
-    localStorage.setItem("go2vet_consultations_v1", JSON.stringify([item, ...current]));
-  } catch {}
+export function saveLocalConsult(_item: LinkedConsultation) {
+  // Sin almacenamiento local para garantizar datos limpios desde la base de datos
 }
 
 export type TenantAppointment = Appointment & { clinicId: string };
@@ -258,194 +244,19 @@ type State = {
 const CLINIC_A1 = "00000000-0000-0000-0000-0000000000a1";
 const ROCKY_ID = "00000000-0000-0000-0000-0000000000b1";
 const LUNA_ID = "00000000-0000-0000-0000-0000000000b2";
+const NANI_ID = "00000000-0000-0000-0000-0000000000b3";
 const MARIA_ID = "00000000-0000-0000-0000-00000000f101";
 const JUAN_ID = "00000000-0000-0000-0000-00000000f102";
+const GHIULINA_ID = "00000000-0000-0000-0000-00000000f103";
 
 export const SEED_APPOINTMENTS: TenantAppointment[] = [];
 
-export const SEED_CONSULTATIONS: LinkedConsultation[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f451",
-    clinicId: CLINIC_A1,
-    date: new Date().toISOString().split("T")[0],
-    vetId: "f201",
-    petId: ROCKY_ID,
-    reason: "Control de peso y revisión general",
-    weight: 28,
-    temperature: 38.6,
-    diagnosis: "Paciente en excelente estado general y condición corporal óptima.",
-    treatment: "Mantener plan de alimentación balanceado. Próximo control en 6 meses.",
-    medications: "Suplemento omega 3 para pelaje.",
-    notes: "Sin hallazgos clínicos relevantes. Frecuencia cardíaca y respiratoria normales.",
-    appointmentId: "00000000-0000-0000-0000-00000000f401",
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f452",
-    clinicId: CLINIC_A1,
-    date: new Date(Date.now() - 12 * 86400000).toISOString().split("T")[0],
-    vetId: "f201",
-    petId: ROCKY_ID,
-    reason: "Consulta por alergia cutánea y prurito",
-    weight: 27.5,
-    temperature: 38.7,
-    diagnosis: "Dermatitis atópica estacional leve.",
-    treatment: "Baño medicado hipoalergénico cada 5 días y dieta balanceada.",
-    medications: "Oclacitinib (Apoquel) 10mg cada 24h por 10 días.",
-    notes: "Evolución muy favorable tras primera semana de tratamiento.",
-    appointmentId: "00000000-0000-0000-0000-00000000f403",
-  },
-];
-
-export const SEED_VACCINES: Vaccine[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f501",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    vaccineName: "Rabia (Antirrábica)",
-    laboratory: "Zoetis (Defensor 3)",
-    batchNumber: "RB-2025-118",
-    applicationDate: new Date(Date.now() - 60 * 86400000).toISOString().split("T")[0],
-    nextDueDate: new Date(Date.now() + 305 * 86400000).toISOString().split("T")[0],
-    veterinarian: "Dra. Ana Martínez",
-    notes: "Refuerzo anual aplicado con éxito. Sin reacciones adversas.",
-    createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f502",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    vaccineName: "Múltiple Canina (Séxtuple)",
-    laboratory: "MSD Animal Health (Nobivac)",
-    batchNumber: "PV-552",
-    applicationDate: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
-    nextDueDate: new Date(Date.now() + 335 * 86400000).toISOString().split("T")[0],
-    veterinarian: "Dra. Ana Martínez",
-    notes: "Protege contra Parvovirus, Moquillo, Hepatitis y Leptospirosis.",
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f503",
-    clinicId: CLINIC_A1,
-    petId: LUNA_ID,
-    vaccineName: "Triple Felina (FVRCP)",
-    laboratory: "Boehringer Ingelheim",
-    batchNumber: "TF-8812",
-    applicationDate: new Date(Date.now() - 40 * 86400000).toISOString().split("T")[0],
-    nextDueDate: new Date(Date.now() + 325 * 86400000).toISOString().split("T")[0],
-    veterinarian: "Dr. Luis Pérez",
-    notes: "Protección contra Rinotraqueítis, Calicivirus y Panleucopenia.",
-    createdAt: new Date(Date.now() - 40 * 86400000).toISOString(),
-  },
-];
-
-export const SEED_DEWORMINGS: Deworming[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f551",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    productName: "Drontal Plus",
-    activeIngredient: "Praziquantel + Pirantel + Febantel",
-    dewormingType: "Interna",
-    applicationDate: new Date(Date.now() - 45 * 86400000).toISOString().split("T")[0],
-    nextApplicationDate: new Date(Date.now() + 75 * 86400000).toISOString().split("T")[0],
-    weight: 28,
-    dose: "1 tableta completa con comida",
-    veterinarian: "Dra. Ana Martínez",
-    notes: "Desparasitación interna trimestral completada.",
-    createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f552",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    productName: "NexGard Spectra",
-    activeIngredient: "Afoxolaner + Milbemicina oxima",
-    dewormingType: "Mixta",
-    applicationDate: new Date(Date.now() - 15 * 86400000).toISOString().split("T")[0],
-    nextApplicationDate: new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0],
-    weight: 28,
-    dose: "1 comprimido masticable (15-30 kg)",
-    veterinarian: "Dra. Ana Martínez",
-    notes: "Control integral de pulgas, garrapatas y nematodos.",
-    createdAt: new Date(Date.now() - 15 * 86400000).toISOString(),
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f553",
-    clinicId: CLINIC_A1,
-    petId: LUNA_ID,
-    productName: "Revolution Plus Felino",
-    activeIngredient: "Selamectina + Sarolaner",
-    dewormingType: "Mixta",
-    applicationDate: new Date(Date.now() - 20 * 86400000).toISOString().split("T")[0],
-    nextApplicationDate: new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0],
-    weight: 4,
-    dose: "1 pipeta tópica spot-on",
-    veterinarian: "Dr. Luis Pérez",
-    notes: "Pipeta antiparasitaria aplicada en nuca.",
-    createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
-  },
-];
-
-export const SEED_SURGERIES: Surgery[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f601",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    surgeryDate: new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0],
-    procedureType: "Esterilización Quirúrgica",
-    veterinarian: "Dra. Ana Martínez",
-    assistant: "Aux. Pedro Ríos",
-    preoperativeDiagnosis: "Paciente sano apto para procedimiento electivo.",
-    procedurePerformed: "Orquiectomía prescrotal estándar sin complicaciones.",
-    anesthesiaType: "Inhalatoria (Isoflurano) + Bloqueo local",
-    medications: "Tramadol, Meloxicam, Cefalexina",
-    durationMinutes: 45,
-    status: "Finalizada",
-    observations: "Excelente recuperación anestésica. Parámetros estables durante cirugía.",
-    postoperativeRecommendations: "Reposo por 10 días, uso estricto de collar isabelino, curaciones diarias.",
-    createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-  },
-];
-
-export const SEED_PET_PHOTOS: PetPhoto[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f851",
-    clinicId: CLINIC_A1,
-    petId: ROCKY_ID,
-    title: "Revisión dermatológica y cicatrización",
-    category: "Seguimiento clínico",
-    photoUrl: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=800",
-    photoDate: new Date().toISOString().split("T")[0],
-    veterinarian: "Dra. Ana Martínez",
-    clinicalNotes: "Piel limpia, folículos sanos y pelaje brillante.",
-    uploadedBy: "f201",
-    createdAt: new Date().toISOString(),
-  },
-];
-
-export const SEED_HOSPITALIZATIONS: Hospitalization[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f701",
-    clinicId: CLINIC_A1,
-    petId: LUNA_ID,
-    admissionDate: new Date().toISOString().split("T")[0],
-    admissionTime: "08:30",
-    veterinarian: "Dr. Luis Pérez",
-    reason: "Vómitos y letargo",
-    initialDiagnosis: "Gastroenteritis aguda",
-    treatmentPlan: "Fluidoterapia y ayuno controlado.",
-    patientStatus: "Estable",
-    roomNumber: "H-01",
-    status: "Hospitalizado",
-    observations: "Evolución favorable.",
-    dischargeDate: "",
-    dischargeSummary: "",
-    ownerInstructions: "",
-    dischargeMedications: "",
-    followupDate: "",
-    createdAt: new Date().toISOString(),
-  },
-];
+export const SEED_CONSULTATIONS: LinkedConsultation[] = [];
+export const SEED_VACCINES: Vaccine[] = [];
+export const SEED_DEWORMINGS: Deworming[] = [];
+export const SEED_SURGERIES: Surgery[] = [];
+export const SEED_PET_PHOTOS: PetPhoto[] = [];
+export const SEED_HOSPITALIZATIONS: Hospitalization[] = [];
 
 function mergeWithSeed<T extends { id: string }>(fetched: T[], seed: T[]): T[] {
   const ids = new Set(fetched.map((x) => x.id));

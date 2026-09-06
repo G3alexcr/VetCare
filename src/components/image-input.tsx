@@ -2,10 +2,11 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ImagePlus, Upload, X, Link2 } from "lucide-react";
+import { ImagePlus, Upload, X, Link2, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useStorageUsage, dataUrlSize } from "@/lib/storage";
 import { usePlanCapabilities } from "@/lib/saas-store";
+import { CameraCaptureDialog } from "@/components/camera-capture-dialog";
 
 type Props = {
   label?: string;
@@ -44,8 +45,10 @@ function fileToResizedDataUrl(file: File, maxDim = 1024): Promise<string> {
 
 export function ImageInput({ label, value, onChange, placeholder, aspect = "square", className }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [urlOpen, setUrlOpen] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const caps = usePlanCapabilities();
   const used = useStorageUsage();
   const maxBytes = caps.maxStorageGb * 1024 * 1024 * 1024;
@@ -77,6 +80,16 @@ export function ImageInput({ label, value, onChange, placeholder, aspect = "squa
     setUrlOpen(false);
   };
 
+  const handleCaptured = (dataUrl: string) => {
+    const newSize = dataUrlSize(dataUrl);
+    if (used + newSize > maxBytes) {
+      toast.error(`Almacenamiento del plan superado (${caps.maxStorageGb} GB).`);
+      return;
+    }
+    onChange(dataUrl);
+    toast.success("Fotografía capturada");
+  };
+
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
       {label && <Label>{label}</Label>}
@@ -85,23 +98,30 @@ export function ImageInput({ label, value, onChange, placeholder, aspect = "squa
           className={`${aspect === "square" ? "aspect-square w-36 sm:w-44" : "aspect-video w-full max-w-md"} shrink-0 rounded-xl overflow-hidden border bg-muted grid place-items-center`}
         >
           {value ? (
-            <img src={value} alt="" className="w-full h-full object-cover" />
+            <img src={value} alt="" className="w-full h-full object-cover object-top" />
           ) : (
             <ImagePlus className="h-8 w-8 text-muted-foreground/40" />
           )}
         </div>
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-              <Upload className="h-4 w-4 mr-1" /> Subir imagen
+            <Button type="button" variant="default" size="sm" onClick={() => setCameraDialogOpen(true)} className="bg-primary text-primary-foreground gap-1.5">
+              <Camera className="h-4 w-4" /> Tomar foto
+            </Button>
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+
+            <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-1.5">
+              <Upload className="h-4 w-4" /> Subir archivo
             </Button>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-            <Button type="button" variant="outline" size="sm" onClick={() => { setUrlOpen(true); if (value && value.startsWith("http")) setUrlDraft(value); else setUrlDraft(""); }}>
-              <Link2 className="h-4 w-4 mr-1" /> Usar URL
+
+            <Button type="button" variant="outline" size="sm" onClick={() => { setUrlOpen(!urlOpen); if (value && value.startsWith("http")) setUrlDraft(value); else setUrlDraft(""); }} className="gap-1.5">
+              <Link2 className="h-4 w-4" /> Usar URL
             </Button>
+
             {value && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
-                <X className="h-4 w-4 mr-1" /> Quitar
+              <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)} className="text-destructive hover:bg-destructive/10 gap-1.5">
+                <X className="h-4 w-4" /> Quitar
               </Button>
             )}
           </div>
@@ -117,11 +137,18 @@ export function ImageInput({ label, value, onChange, placeholder, aspect = "squa
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Sube la imagen desde tu equipo o teléfono (se guarda en base64) o pégala por URL.
+              Toma una foto con tu cámara, sube un archivo desde tu dispositivo o pégala por URL.
             </p>
           )}
         </div>
       </div>
+
+      <CameraCaptureDialog
+        open={cameraDialogOpen}
+        onOpenChange={setCameraDialogOpen}
+        onCapture={handleCaptured}
+        title={label ? `Tomar foto: ${label}` : "Tomar foto con cámara"}
+      />
     </div>
   );
 }

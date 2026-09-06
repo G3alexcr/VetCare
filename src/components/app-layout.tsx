@@ -125,7 +125,20 @@ export function AppLayout({
   const allowed = !currentModule || can(currentModule, "view");
 
   useEffect(() => {
-    if (ready && !user) navigate({ to: "/login", replace: true });
+    if (!ready) return;
+    if (!user) {
+      const isPortalClient = typeof window !== "undefined" && localStorage.getItem("vetcare_portal_owner");
+      if (isPortalClient) {
+        navigate({ to: "/portal/dashboard", replace: true });
+      } else {
+        navigate({ to: "/login", replace: true });
+      }
+      return;
+    }
+    const validRoles = ["super", "admin", "vet", "reception"];
+    if (!validRoles.includes(user.role)) {
+      navigate({ to: "/portal/dashboard", replace: true });
+    }
   }, [navigate, ready, user]);
 
   const handleLogout = () => {

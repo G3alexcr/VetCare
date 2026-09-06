@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
-import { Plus, Search, Pencil, Trash2, Eye, GitCompare, X } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Plus, Search, Pencil, Trash2, Eye, GitCompare, X, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ImageInput } from "@/components/image-input";
+import { CameraCaptureDialog } from "@/components/camera-capture-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +20,34 @@ import {
   type PetPhotoCategory,
 } from "@/lib/store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
+import { useAllPets } from "@/lib/pets-store";
 import { toast } from "sonner";
 
 export function PhotosTab({ petId }: { petId: string }) {
   const all = usePetPhotos();
+  const allPets = useAllPets();
+  const currentPet = allPets.find((p) => p.id === petId);
   const veterinarios = useVeterinarios();
-  const photos = useMemo(
-    () => all.filter((p) => p.petId === petId).sort((a, b) => b.photoDate.localeCompare(a.photoDate)),
-    [all, petId]
-  );
+  const photos = useMemo(() => {
+    const list = [...all.filter((p) => p.petId === petId)];
+    const profilePhoto = currentPet?.photo || (petId === "00000000-0000-0000-0000-0000000000b3" ? "/nani.png" : "");
+    if (profilePhoto && !list.some((p) => p.photoUrl === profilePhoto)) {
+      list.unshift({
+        id: `profile-${petId}`,
+        clinicId: currentPet?.clinicId || "",
+        petId: petId,
+        title: `Foto Oficial — ${currentPet?.name || "Mascota"}`,
+        photoUrl: profilePhoto,
+        photoDate: currentPet?.createdAt ? currentPet.createdAt.split("T")[0] : new Date().toISOString().split("T")[0],
+        category: "General",
+        veterinarian: "Clínica",
+        clinicalNotes: "Fotografía principal del expediente clínico y carné digital",
+        uploadedBy: "u1",
+        createdAt: currentPet?.createdAt || new Date().toISOString(),
+      });
+    }
+    return list.sort((a, b) => b.photoDate.localeCompare(a.photoDate));
+  }, [all, petId, currentPet]);
 
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
@@ -38,6 +58,14 @@ export function PhotosTab({ petId }: { petId: string }) {
   const [viewing, setViewing] = useState<PetPhoto | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [initialPhoto, setInitialPhoto] = useState("");
+
+  const handleCaptureFromCamera = (dataUrl: string) => {
+    setInitialPhoto(dataUrl);
+    setEditing(null);
+    setFormOpen(true);
+  };
 
   const vets = useMemo(() => Array.from(new Set(photos.map((p) => p.veterinarian).filter(Boolean))), [photos]);
 
@@ -57,8 +85,8 @@ export function PhotosTab({ petId }: { petId: string }) {
     });
   };
 
-  const openNew = () => { setEditing(null); setFormOpen(true); };
-  const openEdit = (p: PetPhoto) => { setEditing(p); setFormOpen(true); setViewing(null); };
+  const openNew = () => { setEditing(null); setInitialPhoto(""); setFormOpen(true); };
+  const openEdit = (p: PetPhoto) => { setEditing(p); setInitialPhoto(""); setFormOpen(true); setViewing(null); };
 
   return (
     <div className="space-y-3">
@@ -82,15 +110,24 @@ export function PhotosTab({ petId }: { petId: string }) {
           </SelectContent>
         </Select>
         <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-[160px]" />
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <Button
             variant={compareMode ? "secondary" : "outline"}
             size="sm"
             onClick={() => { setCompareMode((v) => !v); setSelected([]); }}
           >
-            <GitCompare className="h-4 w-4 mr-2" /> {compareMode ? "Cancelar" : "Comparar"}
+            <GitCompare className="h-4 w-4 mr-1.5" /> {compareMode ? "Cancelar" : "Comparar"}
           </Button>
-          <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Subir fotografía</Button>
+          <Button
+            size="sm"
+            onClick={() => setCameraOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm gap-1.5"
+          >
+            <Camera className="h-4 w-4" /> Tomar foto
+          </Button>
+          <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Subir fotografía
+          </Button>
         </div>
       </div>
 
@@ -119,17 +156,16 @@ export function PhotosTab({ petId }: { petId: string }) {
               >
                 <div className="aspect-square bg-muted overflow-hidden relative">
                   <img src={p.photoUrl} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
-                  {compareMode && isSel && (
-                    <Badge className="absolute top-2 left-2">{selected.indexOf(p.id) + 1}</Badge>
-                  )}
-                </div>
-                <div className="p-2.5 space-y-1">
-                  <div className="text-sm font-medium truncate">{p.title}</div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <Badge variant="secondary" className="text-[10px]">{p.category}</Badge>
-                    <span>{p.photoDate}</span>
+                  <div className="absolute top-2 left-2">
+                    <Badge variant="secondary" className="bg-black/60 text-white text-[10px]">{p.category}</Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">{p.veterinarian}</div>
+                  <div className="absolute top-2 right-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">{p.photoDate}</span>
+                  </div>
+                </div>
+                <div className="p-2.5">
+                  <div className="font-medium text-xs truncate">{p.title}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">{p.veterinarian}</div>
                 </div>
               </Card>
             );
@@ -140,11 +176,23 @@ export function PhotosTab({ petId }: { petId: string }) {
       <ComparePanel photos={filtered.filter((p) => selected.includes(p.id))} onClose={() => setSelected([])} />
 
       <PhotoFormDialog
-        key={editing?.id ?? "new"}
+        key={editing?.id ?? (initialPhoto ? "captured" : "new")}
         open={formOpen}
-        onOpenChange={setFormOpen}
+        onOpenChange={(o) => {
+          setFormOpen(o);
+          if (!o) setInitialPhoto("");
+        }}
         editing={editing}
         petId={petId}
+        initialPhoto={initialPhoto}
+        petName={currentPet?.name}
+      />
+
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onCapture={handleCaptureFromCamera}
+        title={`Tomar fotografía de ${currentPet?.name || "mascota"}`}
       />
 
       <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
@@ -228,14 +276,24 @@ function PhotoFormDialog({
   onOpenChange,
   editing,
   petId,
+  initialPhoto,
+  petName,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   editing: PetPhoto | null;
   petId: string;
+  initialPhoto?: string;
+  petName?: string;
 }) {
-  const [preview, setPreview] = useState<string>(editing?.photoUrl ?? "");
+  const [preview, setPreview] = useState<string>(initialPhoto || editing?.photoUrl || "");
   const vets = useVeterinarios();
+
+  useEffect(() => {
+    if (open) {
+      setPreview(initialPhoto || editing?.photoUrl || "");
+    }
+  }, [open, initialPhoto, editing]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -256,17 +314,21 @@ function PhotoFormDialog({
       toast.success("Fotografía actualizada");
     } else {
       addPetPhoto({ petId, uploadedBy: "u1", ...base });
-      toast.success("📷 Fotografía clínica agregada");
+      toast.success("📷 Fotografía clínica guardada");
     }
     onOpenChange(false);
     setPreview("");
   };
 
+  const defaultTitle = editing?.title || (initialPhoto ? `Foto clínica — ${petName || "Paciente"}` : "");
+
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setPreview(""); }}>
       <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editing ? "Editar fotografía" : "Subir fotografía"}</DialogTitle>
+          <DialogTitle>
+            {editing ? "Editar fotografía" : initialPhoto ? "Guardar fotografía tomada" : "Subir fotografía"}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-2">
@@ -274,7 +336,7 @@ function PhotoFormDialog({
           </div>
           <div className="space-y-2">
             <Label>Título</Label>
-            <Input name="title" defaultValue={editing?.title} required />
+            <Input name="title" defaultValue={defaultTitle} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

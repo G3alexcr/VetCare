@@ -15,6 +15,8 @@ import {
   getOpenSession,
   usePosCategories,
   usePosProducts,
+  useAllPosCategories,
+  useAllPosProducts,
   type PaymentMethod,
   type PosOrderStatus,
 } from "@/lib/pos-store";
@@ -66,8 +68,13 @@ function TiendaOnline() {
   const navigate = useNavigate();
   const { owner } = usePortalAuth();
   const { user } = useAuth();
-  const products = usePosProducts();
-  const categories = usePosCategories();
+  const tenantProducts = usePosProducts();
+  const allPosProducts = useAllPosProducts();
+  const products = tenantProducts.length > 0 ? tenantProducts : allPosProducts;
+
+  const tenantCategories = usePosCategories();
+  const allPosCategories = useAllPosCategories();
+  const categories = tenantCategories.length > 0 ? tenantCategories : allPosCategories;
   const currency = useCurrency();
   const clientes = useClientes();
 

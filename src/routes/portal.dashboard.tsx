@@ -13,19 +13,23 @@ import {
   ChevronRight,
   Plus,
   HeartHandshake,
+  Maximize2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { PortalLayout } from "@/components/portal-layout";
 import { UpcomingVaccines } from "@/components/upcoming-vaccines";
 import { PetVaccineSchedule } from "@/components/pet-vaccine-schedule";
 import { PetRecordViewer } from "./portal.mascotas";
 import { usePortalAuth } from "@/lib/portal-auth";
 import { usePets, useAllPets } from "@/lib/pets-store";
+import { useAllClientes } from "@/lib/clientes-store";
 import { useAllAppointments, useAllConsultations, useAllVaccines, useAllDewormings } from "@/lib/store";
 import { buildReminders, requestNotificationPermission, notify } from "@/lib/notifications";
+import { toast } from "sonner";
 import type { Pet } from "@/lib/mock-data";
 
 const ownerNotified = new Set<string>();
@@ -64,6 +68,23 @@ const DEFAULT_LUNA_PET: Pet = {
   clientId: "00000000-0000-0000-0000-00000000f102",
 };
 
+const DEFAULT_NANI_PET: Pet = {
+  id: "09f5d472-9f7e-4e83-9f7d-702fb78348b6",
+  name: "Nani",
+  species: "Canino",
+  breed: "Raza Pequeña",
+  sex: "Hembra",
+  color: "Negro y cafe",
+  birthDate: "2024-09-29",
+  weight: 8,
+  microchip: "",
+  sterilized: false,
+  allergies: "Ninguna",
+  notes: "Paciente Nani en excelente estado de salud.",
+  photo: "/nani.png",
+  clientId: "5e700fd9-3323-433c-9570-294e46c10785",
+};
+
 export const Route = createFileRoute("/portal/dashboard")({
   head: () => ({ meta: [{ title: "Inicio — Portal del Propietario" }] }),
   component: () => (
@@ -88,27 +109,51 @@ function PortalDashboard() {
   const vaccines = useAllVaccines();
   const dewormings = useAllDewormings();
 
-  const isMaria = !owner || owner.email?.toLowerCase() === "maria@gmail.com" || owner.id === "00000000-0000-0000-0000-00000000f101" || owner.id === "cl_1";
-  const isJuan = owner?.email?.toLowerCase() === "juan@hotmail.com" || owner?.id === "00000000-0000-0000-0000-00000000f102";
+  const clientes = useAllClientes();
+  const emailLower = (owner?.email || "").trim().toLowerCase();
 
-  const targetClientId = isMaria
-    ? "00000000-0000-0000-0000-00000000f101"
-    : isJuan
-    ? "00000000-0000-0000-0000-00000000f102"
-    : owner?.id;
+  // Conjunto de todos los IDs de cliente que coincidan por ID o por correo electrónico
+  const clientIdsForOwner = new Set<string>();
+  if (owner?.id) clientIdsForOwner.add(owner.id);
+  if (emailLower) {
+    clientes
+      .filter((c) => (c.email || "").trim().toLowerCase() === emailLower)
+      .forEach((c) => clientIdsForOwner.add(c.id));
+  }
 
-  let myPets = allPets.filter((p) => p.clientId === targetClientId || (isMaria && p.name === "Rocky"));
+  const isMaria = emailLower === "maria@gmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f101") || clientIdsForOwner.has("cl_1");
+  const isJuan = emailLower === "juan@hotmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f102");
+  const isGhiulina = emailLower === "ghiulyscr@gmail.com" || clientIdsForOwner.has("5e700fd9-3323-433c-9570-294e46c10785") || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f103");
+
+  let rawPets = allPets
+    .filter((p) => clientIdsForOwner.has(p.clientId) || (isMaria && p.name === "Rocky") || (isGhiulina && p.name === "Nani"))
+    .map((p) => {
+      if (p.id === "09f5d472-9f7e-4e83-9f7d-702fb78348b6" || p.name === "Nani") {
+        return { ...p, photo: "/nani.png", clientId: "5e700fd9-3323-433c-9570-294e46c10785" };
+      }
+      return p;
+    });
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  let myPets = rawPets.filter((p) => {
+    if (seenIds.has(p.id) || seenNames.has(p.name.trim().toLowerCase())) return false;
+    seenIds.add(p.id);
+    seenNames.add(p.name.trim().toLowerCase());
+    return true;
+  });
+
   if (myPets.length === 0) {
     if (isMaria) myPets = [DEFAULT_ROCKY_PET];
     else if (isJuan) myPets = [DEFAULT_LUNA_PET];
+    else if (isGhiulina) myPets = [DEFAULT_NANI_PET];
   }
 
   const petIds = new Set(myPets.map((p) => p.id));
-
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [activeModalTab, setActiveModalTab] = useState<string>("info");
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
 
-  // Si llega con parámetros ?pet=ID y/o ?tab=TIPO, abrir automáticamente el modal correspondiente
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -124,7 +169,6 @@ function PortalDashboard() {
     }
   }, [myPets]);
 
-  // Aviso push al dueño por vacunas/desparasitaciones próximas de sus mascotas
   useEffect(() => {
     const remind = buildReminders(
       vaccines.filter((v) => petIds.has(v.petId)),
@@ -155,16 +199,10 @@ function PortalDashboard() {
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const nextAppt = upcoming[0];
 
-  const myVaccines = vaccines.filter((v) => petIds.has(v.petId));
-  const nextVaccine = myVaccines
-    .filter((v) => v.nextDueDate >= today)
-    .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate))[0];
-
   const firstName = owner.fullName ? owner.fullName.split(" ")[0] : "Estimado(a)";
 
   return (
     <div className="space-y-8 max-w-6xl pb-10">
-      {/* 1. Saludo cálido y bienvenida */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
@@ -185,7 +223,6 @@ function PortalDashboard() {
         </div>
       </div>
 
-      {/* 2. SECCIÓN PRINCIPAL: Tarjetas protagonistas de tus mascotas */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -214,27 +251,29 @@ function PortalDashboard() {
                 key={pet.id}
                 className="overflow-hidden border-border/80 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col bg-card"
               >
-                {/* Foto grande de la mascota */}
-                <div className="relative h-48 w-full overflow-hidden bg-muted">
+                <div
+                  className="relative aspect-square w-full overflow-hidden bg-muted cursor-pointer group select-none"
+                  onClick={() => setPreviewPhoto({ url: pet.photo, title: `${pet.name} · ${pet.species} (${pet.breed})` })}
+                  title="Clic para ver foto completa"
+                >
                   <img
                     src={pet.photo}
                     alt={pet.name}
-                    className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                    className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
                   />
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <span className="bg-black/60 hover:bg-black/80 text-white text-[11px] font-medium px-2 py-1 rounded-md flex items-center gap-1 backdrop-blur-xs shadow-md">
+                      <Maximize2 className="h-3 w-3" /> Ver completa
+                    </span>
+                  </div>
+                  <div className="absolute top-3 right-3 z-10">
                     <Badge className="bg-emerald-600/90 hover:bg-emerald-600 text-white font-medium text-xs px-2.5 py-0.5 shadow-sm backdrop-blur-xs">
                       <span className="h-1.5 w-1.5 rounded-full bg-white mr-1.5 inline-block" />
                       Activo
                     </Badge>
                   </div>
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3 pt-6 text-white">
-                    <div className="text-xs font-medium text-white/90">
-                      {pet.species} · {pet.breed}
-                    </div>
-                  </div>
                 </div>
 
-                {/* Contenido y Datos Médicos Resumidos */}
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div>
                     <div className="flex items-baseline justify-between gap-2">
@@ -244,7 +283,6 @@ function PortalDashboard() {
                       </span>
                     </div>
 
-                    {/* Ficha resumida de edad y peso */}
                     <div className="mt-2.5 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted font-medium text-foreground">
                         {ageFromDate(pet.birthDate)}
@@ -260,7 +298,6 @@ function PortalDashboard() {
                     </div>
                   </div>
 
-                  {/* Acciones directas sobre la mascota: Ver expediente y Carnet */}
                   <div className="space-y-2 pt-2 border-t border-border/60">
                     <div className="grid grid-cols-2 gap-2">
                       <Button
@@ -310,8 +347,7 @@ function PortalDashboard() {
         )}
       </div>
 
-      {/* 3. Acciones Rápidas del Propietario */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <Link
           to="/portal/agenda"
           className="p-4 rounded-xl border border-border/80 bg-card hover:bg-muted/40 transition-all flex flex-col items-center text-center gap-2 group cursor-pointer shadow-xs"
@@ -322,23 +358,6 @@ function PortalDashboard() {
           <span className="text-xs font-bold text-foreground">Agendar Cita</span>
           <span className="text-[11px] text-muted-foreground">Turnos presenciales</span>
         </Link>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (myPets.length > 0) {
-              setSelectedPet(myPets[0]);
-              setActiveModalTab("carne");
-            }
-          }}
-          className="p-4 rounded-xl border border-border/80 bg-card hover:bg-muted/40 transition-all flex flex-col items-center text-center gap-2 group cursor-pointer shadow-xs"
-        >
-          <div className="p-3 rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400 group-hover:scale-110 transition-transform">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <span className="text-xs font-bold text-foreground">Carnet Digital</span>
-          <span className="text-[11px] text-muted-foreground">Vacunas y desparasitación</span>
-        </button>
 
         <Link
           to="/tienda"
@@ -461,6 +480,14 @@ function PortalDashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Visor de Fotografía en Pantalla Completa */}
+      <ImagePreviewDialog
+        open={!!previewPhoto}
+        onOpenChange={(open) => !open && setPreviewPhoto(null)}
+        src={previewPhoto?.url}
+        title={previewPhoto?.title}
+      />
     </div>
   );
 }

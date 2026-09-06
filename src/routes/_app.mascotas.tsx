@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Pencil, Trash2, Cake, Weight, LayoutGrid, Table as TableIcon, Mail } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Cake, Weight, LayoutGrid, Table as TableIcon, Mail, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AppLayout } from "@/components/app-layout";
 import { usePets, addPet, updatePet, deletePet, type TenantPet } from "@/lib/pets-store";
 import { useClientes, type ClinicClient } from "@/lib/clientes-store";
-import { getRazasDeEspecie, useEspecies } from "@/lib/especies-store";
+import { getRazasDeEspecie, useEspecies, addEspecie, addRazaToEspecie } from "@/lib/especies-store";
 import { ImageInput } from "@/components/image-input";
 import { PetRecordDialog } from "@/components/pet-record-dialog";
 import { PortalInvitationDialog } from "@/components/portal-invitation-dialog";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/mascotas")({
@@ -53,24 +54,39 @@ function PetsPage() {
   const [invitationOpen, setInvitationOpen] = useState(false);
   const [invitationClient, setInvitationClient] = useState<ClinicClient | null>(null);
   const [invitationPet, setInvitationPet] = useState<TenantPet | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
   const especies = useEspecies();
   const especiesActivas = useMemo(
     () => especies.filter((s) => s.estado === "Activo").sort((a, b) => a.nombre.localeCompare(b.nombre)),
     [especies]
   );
-  const especieOptions = useMemo(() => {
-    const list = new Set(especiesActivas.map((s) => s.nombre));
-    if (editing?.species) list.add(editing.species); // conserva la especie del registro aunque esté inactiva
-    return Array.from(list).map((nombre) => ({ value: nombre, label: nombre }));
-  }, [especiesActivas, editing]);
-
   const [speciesSel, setSpeciesSel] = useState<string>(() => editing?.species ?? especiesActivas[0]?.nombre ?? "");
   const [breedSel, setBreedSel] = useState<string>(() => editing?.breed ?? "");
   const [photo, setPhoto] = useState<string | null>(null);
 
+  const especieOptions = useMemo(() => {
+    const list = new Set(especiesActivas.map((s) => s.nombre));
+    if (editing?.species) list.add(editing.species);
+    if (speciesSel) list.add(speciesSel);
+    return Array.from(list)
+      .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
+      .map((nombre) => ({ value: nombre, label: nombre }));
+  }, [especiesActivas, editing, speciesSel]);
+
+  const [isAddingSpecies, setIsAddingSpecies] = useState(false);
+  const [newSpeciesName, setNewSpeciesName] = useState("");
+  const [isAddingBreed, setIsAddingBreed] = useState(false);
+  const [newBreedName, setNewBreedName] = useState("");
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setIsAddingSpecies(false);
+      setNewSpeciesName("");
+      setIsAddingBreed(false);
+      setNewBreedName("");
+      return;
+    }
     setSpeciesSel(editing?.species ?? especiesActivas[0]?.nombre ?? "");
     setBreedSel(editing?.breed ?? "");
     setPhoto(editing?.photo ?? null);
@@ -80,21 +96,62 @@ function PetsPage() {
     const razas = getRazasDeEspecie(speciesSel);
     const list = new Set(razas);
     if (breedSel) list.add(breedSel); // conserva la raza actual aunque no esté en el catálogo
-    return Array.from(list).map((nombre) => ({ value: nombre, label: nombre }));
+    return Array.from(list)
+      .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
+      .map((nombre) => ({ value: nombre, label: nombre }));
   }, [speciesSel, breedSel]);
 
+  const handleQuickAddSpecies = () => {
+    const trimmed = newSpeciesName.trim();
+    if (!trimmed) {
+      toast.error("Ingresa el nombre de la especie");
+      return;
+    }
+    addEspecie({
+      nombre: trimmed,
+      descripcion: "Agregada desde formulario de mascotas",
+      estado: "Activo",
+      razas: [],
+    });
+    setSpeciesSel(trimmed);
+    setBreedSel("");
+    setIsAddingSpecies(false);
+    setNewSpeciesName("");
+    toast.success(`Especie "${trimmed}" agregada`);
+  };
+
+  const handleQuickAddBreed = () => {
+    const trimmed = newBreedName.trim();
+    if (!trimmed) {
+      toast.error("Ingresa el nombre de la raza");
+      return;
+    }
+    const targetSpecies = speciesSel || "General";
+    addRazaToEspecie(targetSpecies, trimmed);
+    setBreedSel(trimmed);
+    setIsAddingBreed(false);
+    setNewBreedName("");
+    toast.success(`Raza "${trimmed}" agregada a ${targetSpecies}`);
+  };
+
   const speciesList = useMemo(
-    () => Array.from(new Set([...especiesActivas.map((s) => s.nombre), ...pets.map((p) => p.species)])).filter(Boolean),
+    () =>
+      Array.from(new Set([...especiesActivas.map((s) => s.nombre), ...pets.map((p) => p.species)]))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" })),
     [especiesActivas, pets]
   );
 
   const filtered = useMemo(
-    () => pets.filter((p) => {
-      const matchesQuery = [p.name, p.species, p.breed].join(" ").toLowerCase().includes(query.toLowerCase());
-      const matchesSpecies = speciesFilter === "all" || p.species === speciesFilter;
-      const matchesOwner = ownerFilter === "all" || p.clientId === ownerFilter;
-      return matchesQuery && matchesSpecies && matchesOwner;
-    }),
+    () =>
+      pets
+        .filter((p) => {
+          const matchesQuery = [p.name, p.species, p.breed].join(" ").toLowerCase().includes(query.toLowerCase());
+          const matchesSpecies = speciesFilter === "all" || p.species === speciesFilter;
+          const matchesOwner = ownerFilter === "all" || p.clientId === ownerFilter;
+          return matchesQuery && matchesSpecies && matchesOwner;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
     [pets, query, speciesFilter, ownerFilter]
   );
 
@@ -102,10 +159,12 @@ function PetsPage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const data = Object.fromEntries(fd.entries()) as Record<string, string>;
+    const finalSpecies = speciesSel || data.species || "";
+    const finalBreed = breedSel || data.breed || "";
     const base = {
       name: data.name,
-      species: data.species,
-      breed: data.breed,
+      species: finalSpecies,
+      breed: finalBreed,
       sex: data.sex as TenantPet["sex"],
       color: data.color,
       birthDate: data.birthDate,
@@ -117,6 +176,9 @@ function PetsPage() {
       clientId: data.clientId,
       photo: photo ?? "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400",
     };
+    if (finalSpecies && finalBreed) {
+      addRazaToEspecie(finalSpecies, finalBreed);
+    }
     if (editing) {
       updatePet(editing.id, base);
       toast.success("Mascota actualizada");
@@ -153,25 +215,159 @@ function PetsPage() {
               <TextField label="Nombre" name="name" defaultValue={editing?.name} required />
               <SelectField label="Cliente propietario" name="clientId" defaultValue={editing?.clientId ?? clientes[0]?.id ?? ""}
                 options={clientes.map((c) => ({ value: c.id, label: c.name }))} />
+              {/* Especie */}
               <div className="space-y-2">
-                <Label>Especie</Label>
-                <Select name="species" value={speciesSel} onValueChange={(v) => { setSpeciesSel(v); setBreedSel(""); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {especieOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Especie</Label>
+                  {!isAddingSpecies && (
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingSpecies(true); setNewSpeciesName(""); }}
+                      className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Nueva especie
+                    </button>
+                  )}
+                </div>
+                {isAddingSpecies ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      placeholder="Nombre de especie (ej: Ave, Hurón...)"
+                      value={newSpeciesName}
+                      onChange={(e) => setNewSpeciesName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleQuickAddSpecies();
+                        }
+                      }}
+                      className="h-9 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9 px-3 shrink-0"
+                      onClick={handleQuickAddSpecies}
+                    >
+                      Agregar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 px-2 shrink-0 text-muted-foreground"
+                      onClick={() => setIsAddingSpecies(false)}
+                      title="Cancelar"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    name="species"
+                    value={speciesSel}
+                    onValueChange={(v) => {
+                      if (v === "__add_species__") {
+                        setIsAddingSpecies(true);
+                        setNewSpeciesName("");
+                      } else {
+                        setSpeciesSel(v);
+                        setBreedSel("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecciona especie" /></SelectTrigger>
+                    <SelectContent>
+                      {especieOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      <SelectItem value="__add_species__" className="text-primary font-medium focus:text-primary cursor-pointer border-t mt-1 pt-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <Plus className="h-3.5 w-3.5" /> Agregar otra especie...
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <input type="hidden" name="species" value={speciesSel} />
               </div>
+
+              {/* Raza */}
               <div className="space-y-2">
-                <Label>Raza</Label>
-                <Select name="breed" value={breedSel} onValueChange={setBreedSel}>
-                  <SelectTrigger><SelectValue placeholder="Selecciona raza" /></SelectTrigger>
-                  <SelectContent>
-                    {breedOptions.length === 0 ? (
-                      <SelectItem value="__sin_razas" disabled>Sin razas para esta especie</SelectItem>
-                    ) : breedOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Raza</Label>
+                  {!isAddingBreed && (
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingBreed(true); setNewBreedName(""); }}
+                      className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Nueva raza
+                    </button>
+                  )}
+                </div>
+                {isAddingBreed ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      placeholder={`Raza para ${speciesSel || "esta especie"}...`}
+                      value={newBreedName}
+                      onChange={(e) => setNewBreedName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleQuickAddBreed();
+                        }
+                      }}
+                      className="h-9 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9 px-3 shrink-0"
+                      onClick={handleQuickAddBreed}
+                    >
+                      Agregar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 px-2 shrink-0 text-muted-foreground"
+                      onClick={() => setIsAddingBreed(false)}
+                      title="Cancelar"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    name="breed"
+                    value={breedSel}
+                    onValueChange={(v) => {
+                      if (v === "__add_breed__") {
+                        setIsAddingBreed(true);
+                        setNewBreedName("");
+                      } else {
+                        setBreedSel(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecciona raza" /></SelectTrigger>
+                    <SelectContent>
+                      {breedOptions.length === 0 ? (
+                        <SelectItem value="__sin_razas" disabled>Sin razas registradas aún</SelectItem>
+                      ) : (
+                        breedOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)
+                      )}
+                      <SelectItem value="__add_breed__" className="text-primary font-medium focus:text-primary cursor-pointer border-t mt-1 pt-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <Plus className="h-3.5 w-3.5" /> Agregar otra raza...
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <input type="hidden" name="breed" value={breedSel} />
               </div>
               <SelectField label="Sexo" name="sex" defaultValue={editing?.sex ?? "Macho"} options={[
                 { value: "Macho", label: "Macho" }, { value: "Hembra", label: "Hembra" },
@@ -233,9 +429,9 @@ function PetsPage() {
           {filtered.map((p) => {
             const owner = clientes.find((c) => c.id === p.clientId);
             return (
-              <Card key={p.id} className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDetail(p)}>
-                <div className="aspect-square bg-muted overflow-hidden">
-                  <img src={p.photo} alt={p.name} className="w-full h-full object-cover" />
+              <Card key={p.id} className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer group" onClick={() => setDetail(p)}>
+                <div className="aspect-square bg-muted overflow-hidden relative">
+                  <img src={p.photo} alt={p.name} className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105" />
                 </div>
                 <div className="p-4 space-y-2">
                   <div className="flex items-start justify-between">
@@ -301,7 +497,18 @@ function PetsPage() {
                   <TableRow key={p.id} className="cursor-pointer" onClick={() => setDetail(p)}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <img src={p.photo} alt={p.name} className="h-9 w-9 rounded-full object-cover" />
+                        <img
+                          src={p.photo}
+                          alt={p.name}
+                          className="h-9 w-9 rounded-full object-cover cursor-zoom-in hover:ring-2 hover:ring-primary transition-all"
+                          title="Clic para ver foto completa"
+                          onClick={(e) => {
+                            if (p.photo) {
+                              e.stopPropagation();
+                              setPreviewImage({ src: p.photo, title: p.name });
+                            }
+                          }}
+                        />
                         <span className="font-medium">{p.name}</span>
                       </div>
                     </TableCell>
@@ -359,6 +566,13 @@ function PetsPage() {
         onOpenChange={setInvitationOpen}
         client={invitationClient}
         pet={invitationPet}
+      />
+
+      <ImagePreviewDialog
+        src={previewImage?.src}
+        title={previewImage?.title}
+        open={!!previewImage}
+        onClose={() => setPreviewImage(null)}
       />
     </div>
   );

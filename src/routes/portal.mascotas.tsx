@@ -12,6 +12,7 @@ import {
   Clock,
   ChevronRight,
   FileText,
+  Maximize2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -34,6 +36,7 @@ import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth } from "@/lib/portal-auth";
 import { type Pet } from "@/lib/mock-data";
 import { usePets, useAllPets, updatePet } from "@/lib/pets-store";
+import { useAllClientes } from "@/lib/clientes-store";
 import { useAllVeterinarios } from "@/lib/veterinarios-store";
 import {
   useAllAppointments,
@@ -46,47 +49,8 @@ import {
   useAllPetPhotos,
   addPetPhoto,
   deletePetPhoto,
-  SEED_VACCINES,
-  SEED_DEWORMINGS,
-  SEED_CONSULTATIONS,
-  SEED_SURGERIES,
-  SEED_PET_PHOTOS,
 } from "@/lib/store";
 import { toast } from "sonner";
-
-const DEFAULT_ROCKY_PET: Pet = {
-  id: "00000000-0000-0000-0000-0000000000b1",
-  name: "Rocky",
-  species: "Canino",
-  breed: "Labrador Retriever",
-  sex: "Macho",
-  color: "Dorado",
-  birthDate: "2022-05-10",
-  weight: 28,
-  microchip: "981098102938475",
-  sterilized: true,
-  allergies: "Ninguna",
-  notes: "Sociable y juguetón",
-  photo: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400",
-  clientId: "00000000-0000-0000-0000-00000000f101",
-};
-
-const DEFAULT_LUNA_PET: Pet = {
-  id: "00000000-0000-0000-0000-0000000000b2",
-  name: "Luna",
-  species: "Felino",
-  breed: "Siamés",
-  sex: "Hembra",
-  color: "Crema y café",
-  birthDate: "2023-01-01",
-  weight: 4,
-  microchip: "981098102938476",
-  sterilized: true,
-  allergies: "Ninguna",
-  notes: "Tranquila y cariñosa",
-  photo: "https://images.unsplash.com/photo-1592194996308-7b43878e84a6?w=400",
-  clientId: "00000000-0000-0000-0000-00000000f102",
-};
 
 const MAX_FOTOS = 3;
 
@@ -116,21 +80,46 @@ function MyPetsPage() {
   const allPets = useAllPets();
   const [selected, setSelected] = useState<Pet | null>(null);
   const [currentTab, setCurrentTab] = useState<string>("info");
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
   if (!owner) return null;
 
-  const isMaria = owner.email?.toLowerCase() === "maria@gmail.com" || owner.id === "00000000-0000-0000-0000-00000000f101" || owner.id === "cl_1";
-  const isJuan = owner.email?.toLowerCase() === "juan@hotmail.com" || owner.id === "00000000-0000-0000-0000-00000000f102";
+  const clientes = useAllClientes();
+  const emailLower = (owner.email || "").trim().toLowerCase();
 
-  const targetClientId = isMaria
-    ? "00000000-0000-0000-0000-00000000f101"
-    : isJuan
-    ? "00000000-0000-0000-0000-00000000f102"
-    : owner.id;
+  const clientIdsForOwner = new Set<string>();
+  if (owner.id) clientIdsForOwner.add(owner.id);
+  if (emailLower) {
+    clientes
+      .filter((c) => (c.email || "").trim().toLowerCase() === emailLower)
+      .forEach((c) => clientIdsForOwner.add(c.id));
+  }
 
-  let pets = allPets.filter((p) => p.clientId === targetClientId || (isMaria && p.name === "Rocky"));
+  const isMaria = emailLower === "maria@gmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f101") || clientIdsForOwner.has("cl_1");
+  const isJuan = emailLower === "juan@hotmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f102");
+  const isGhiulina = emailLower === "ghiulyscr@gmail.com" || clientIdsForOwner.has("5e700fd9-3323-433c-9570-294e46c10785") || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f103");
+
+  let rawPets = allPets
+    .filter((p) => clientIdsForOwner.has(p.clientId) || (isMaria && p.name === "Rocky") || (isGhiulina && p.name === "Nani"))
+    .map((p) => {
+      if ((p.id === "09f5d472-9f7e-4e83-9f7d-702fb78348b6" || p.name === "Nani") && (!p.photo || p.photo.includes("unsplash.com"))) {
+        return { ...p, photo: "/nani.png", clientId: "5e700fd9-3323-433c-9570-294e46c10785" };
+      }
+      return p;
+    });
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  let pets = rawPets.filter((p) => {
+    if (seenIds.has(p.id) || seenNames.has(p.name.trim().toLowerCase())) return false;
+    seenIds.add(p.id);
+    seenNames.add(p.name.trim().toLowerCase());
+    return true;
+  });
+
   if (pets.length === 0) {
     if (isMaria) pets = [DEFAULT_ROCKY_PET];
     else if (isJuan) pets = [DEFAULT_LUNA_PET];
+    else if (isGhiulina) pets = [DEFAULT_NANI_PET];
   }
 
   // Leer parámetros ?tab= y ?pet= de la URL (ej. desde el Dashboard u otros accesos)
@@ -169,7 +158,18 @@ function MyPetsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.map((p) => (
             <Card key={p.id} className="overflow-hidden">
-              <img src={p.photo} alt={p.name} className="h-40 w-full object-cover" />
+              <div
+                className="relative aspect-[16/10] sm:h-48 w-full overflow-hidden bg-muted cursor-pointer group select-none"
+                onClick={() => setPreviewPhoto({ url: p.photo, title: `${p.name} · ${p.species} (${p.breed})` })}
+                title="Clic para ver foto completa"
+              >
+                <img src={p.photo} alt={p.name} className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105" />
+                <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <span className="bg-black/60 hover:bg-black/80 text-white text-[10px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1 backdrop-blur-xs shadow-md">
+                    <Maximize2 className="h-3 w-3" /> Ver completa
+                  </span>
+                </div>
+              </div>
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -224,6 +224,14 @@ function MyPetsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Visor de Fotografía en Pantalla Completa */}
+      <ImagePreviewDialog
+        open={!!previewPhoto}
+        onOpenChange={(open) => !open && setPreviewPhoto(null)}
+        src={previewPhoto?.url}
+        title={previewPhoto?.title}
+      />
     </div>
   );
 }
@@ -237,61 +245,29 @@ export function PetRecordViewer({
   initialTab?: string;
   onBack: () => void;
 }) {
-  const today = new Date().toISOString().split("T")[0];
+  const allPetsList = useAllPets();
+  const livePet = allPetsList.find((p) => p.id === pet.id) || pet;
   const isRocky = pet.id === "00000000-0000-0000-0000-0000000000b1" || pet.name?.toLowerCase() === "rocky";
   const isLuna = pet.id === "00000000-0000-0000-0000-0000000000b2" || pet.name?.toLowerCase() === "luna";
+  const isNani = pet.id === "00000000-0000-0000-0000-0000000000b3" || pet.name?.toLowerCase() === "nani";
+  const currentPhoto = (isNani && (!livePet.photo || livePet.photo.includes("unsplash"))) ? "/nani.png" : (livePet.photo || pet.photo || (isNani ? "/nani.png" : ""));
+  const [viewerPhoto, setViewerPhoto] = useState<{ url: string; title: string } | null>(null);
+
+  const today = new Date().toISOString().split("T")[0];
 
   const matchesPet = (petId: string) =>
     petId === pet.id ||
     (isRocky && (petId === "00000000-0000-0000-0000-0000000000b1" || petId === "rocky")) ||
-    (isLuna && (petId === "00000000-0000-0000-0000-0000000000b2" || petId === "luna"));
+    (isLuna && (petId === "00000000-0000-0000-0000-0000000000b2" || petId === "luna")) ||
+    (isNani && (petId === "00000000-0000-0000-0000-0000000000b3" || petId === "nani"));
 
-  const rawConsultations = useAllConsultations().filter((c) => matchesPet(c.petId));
-  const consultations =
-    rawConsultations.length > 0
-      ? rawConsultations
-      : isRocky
-      ? SEED_CONSULTATIONS.filter((c) => c.petId === "00000000-0000-0000-0000-0000000000b1")
-      : [];
-
-  const rawVaccines = useAllVaccines().filter((v) => matchesPet(v.petId));
-  const vaccines =
-    rawVaccines.length > 0
-      ? rawVaccines
-      : isRocky
-      ? SEED_VACCINES.filter((v) => v.petId === "00000000-0000-0000-0000-0000000000b1")
-      : isLuna
-      ? SEED_VACCINES.filter((v) => v.petId === "00000000-0000-0000-0000-0000000000b2")
-      : [];
-
-  const rawDewormings = useAllDewormings().filter((d) => matchesPet(d.petId));
-  const dewormings =
-    rawDewormings.length > 0
-      ? rawDewormings
-      : isRocky
-      ? SEED_DEWORMINGS.filter((d) => d.petId === "00000000-0000-0000-0000-0000000000b1")
-      : isLuna
-      ? SEED_DEWORMINGS.filter((d) => d.petId === "00000000-0000-0000-0000-0000000000b2")
-      : [];
-
-  const rawSurgeries = useAllSurgeries().filter((s) => matchesPet(s.petId));
-  const surgeries =
-    rawSurgeries.length > 0
-      ? rawSurgeries
-      : isRocky
-      ? SEED_SURGERIES.filter((s) => s.petId === "00000000-0000-0000-0000-0000000000b1")
-      : [];
-
+  const consultations = useAllConsultations().filter((c) => matchesPet(c.petId));
+  const vaccines = useAllVaccines().filter((v) => matchesPet(v.petId));
+  const dewormings = useAllDewormings().filter((d) => matchesPet(d.petId));
+  const surgeries = useAllSurgeries().filter((s) => matchesPet(s.petId));
   const hospitalizations = useAllHospitalizations().filter((h) => matchesPet(h.petId));
   const files = useAllPetFiles().filter((f) => matchesPet(f.petId));
-
-  const rawPhotos = useAllPetPhotos().filter((p) => matchesPet(p.petId));
-  const photos =
-    rawPhotos.length > 0
-      ? rawPhotos
-      : isRocky
-      ? SEED_PET_PHOTOS.filter((p) => p.petId === "00000000-0000-0000-0000-0000000000b1")
-      : [];
+  const photos = useAllPetPhotos().filter((p) => matchesPet(p.petId));
 
   const vets = useAllVeterinarios();
   const appointments = useAllAppointments()
@@ -341,17 +317,21 @@ export function PetRecordViewer({
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="relative h-11 w-11 rounded-full overflow-hidden shrink-0 border-2 border-primary/20 shadow-xs">
-            <img src={pet.photo} alt={pet.name} className="h-full w-full object-cover" />
+          <div
+            className="relative h-11 w-11 rounded-full overflow-hidden shrink-0 border-2 border-primary/20 shadow-xs bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group"
+            onClick={() => setViewerPhoto({ url: currentPhoto, title: `${livePet.name} · Foto de perfil` })}
+            title="Clic para ver foto completa"
+          >
+            <img src={currentPhoto} alt={livePet.name} className="h-full w-full object-cover object-top transition-transform group-hover:scale-105" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-base sm:text-lg truncate leading-tight">{pet.name}</h2>
+              <h2 className="font-bold text-base sm:text-lg truncate leading-tight">{livePet.name}</h2>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200">
-                {pet.species}
+                {livePet.species}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground truncate">{pet.breed} · {pet.sex} · {pet.weight} kg</p>
+            <p className="text-xs text-muted-foreground truncate">{livePet.breed} · {livePet.sex} · {livePet.weight} kg</p>
           </div>
         </div>
 
@@ -813,57 +793,121 @@ export function PetRecordViewer({
 
           {/* 8. Galería y Archivos */}
           <TabsContent value="archivos" className="m-0 focus-visible:outline-none space-y-4">
-            <div className="rounded-2xl border bg-card p-4 shadow-xs space-y-3">
+            {/* Foto Oficial / Carné Principal */}
+            {currentPhoto && (
+              <div className="rounded-2xl border bg-card p-4 shadow-xs">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden shrink-0 border-2 border-primary/30 shadow-xs bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group select-none"
+                      onClick={() => setViewerPhoto({ url: currentPhoto, title: `${livePet.name} · Foto Oficial del Carné` })}
+                      title="Clic para ver foto completa"
+                    >
+                      <img src={currentPhoto} alt={livePet.name} className="h-full w-full object-cover object-top transition-transform group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Maximize2 className="h-4 w-4 text-white" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-sm">Foto Oficial del Perfil y Carné</h4>
+                        <Badge className="bg-primary text-primary-foreground text-[10px] px-2 py-0.5">Oficial</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Esta imagen es la que se presenta en el carné digital y el expediente general de {livePet.name}. Haz clic sobre ella para verla en pantalla completa.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-2xl border bg-card p-4 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold text-sm">Fotografías de {pet.name}</h4>
-                  <p className="text-xs text-muted-foreground">Sube fotos clínicas o recuerdos de tu mascota ({photos.length}/{MAX_FOTOS})</p>
+                  <h4 className="font-semibold text-sm">Galería fotográfica de {livePet.name}</h4>
+                  <p className="text-xs text-muted-foreground">Toma una foto con tu cámara o sube recuerdos clínicos ({photos.length}/{MAX_FOTOS})</p>
                 </div>
               </div>
 
               {photos.length < MAX_FOTOS ? (
                 <ImageInput
-                  label={`Subir nueva foto (${photos.length}/${MAX_FOTOS})`}
+                  label={`Agregar nueva foto (${photos.length}/${MAX_FOTOS})`}
                   value={null}
                   onChange={(v) => {
                     if (!v) return;
-                    addPetPhoto({ petId: pet.id, title: "Foto de mi mascota", category: "General", photoUrl: v, photoDate: today, veterinarian: "", clinicalNotes: "", uploadedBy: "Dueño" });
-                    toast.success("Fotografía guardada");
+                    addPetPhoto({ petId: livePet.id, title: "Foto de mi mascota", category: "General", photoUrl: v, photoDate: today, veterinarian: "", clinicalNotes: "", uploadedBy: "Dueño" });
+                    toast.success("Fotografía agregada al expediente");
                   }}
                 />
               ) : (
-                <p className="text-xs text-amber-600 font-medium">Límite alcanzado ({MAX_FOTOS} fotos). Elimina una para subir una nueva.</p>
+                <p className="text-xs text-amber-600 font-medium">Límite de fotos adicionales alcanzado ({MAX_FOTOS}). Elimina una para subir una nueva.</p>
               )}
 
-              {photos.length === 0 ? (
-                <div className="text-xs text-muted-foreground text-center py-6 border border-dashed rounded-xl">
-                  Aún no has subido fotografías.
+              <div className="space-y-2 pt-2 border-t">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Fotos disponibles ({photos.length + (currentPhoto ? 1 : 0)})
                 </div>
-              ) : (
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {/* Foto de perfil actual en la galería */}
+                  {currentPhoto && (
+                    <div
+                      className="relative aspect-square rounded-xl overflow-hidden border-2 border-primary/40 bg-muted group shadow-xs cursor-pointer select-none"
+                      onClick={() => setViewerPhoto({ url: currentPhoto, title: `${livePet.name} · Foto Oficial` })}
+                      title="Clic para ver foto completa"
+                    >
+                      <img src={currentPhoto} alt={`${livePet.name} - Principal`} className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105" />
+                      <div className="absolute top-2 left-2 flex items-center gap-1 h-6 px-2 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold shadow-xs z-10">
+                        ⭐ Carné Oficial
+                      </div>
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-black/70 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 shadow-md">
+                          <Maximize2 className="h-3 w-3" /> Ver completa
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {photos.map((p) => (
-                    <div key={p.id} className="relative aspect-square rounded-xl overflow-hidden border bg-muted group">
-                      <img src={p.photoUrl} alt={p.title} className="h-full w-full object-cover" />
+                    <div
+                      key={p.id}
+                      className="relative aspect-square rounded-xl overflow-hidden border bg-muted group shadow-xs cursor-pointer select-none"
+                      onClick={() => setViewerPhoto({ url: p.photoUrl, title: `${livePet.name} · ${p.title || "Fotografía"}` })}
+                      title="Clic para ver foto completa"
+                    >
+                      <img src={p.photoUrl} alt={p.title} className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-black/70 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 shadow-md">
+                          <Maximize2 className="h-3 w-3" /> Ver completa
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => { deletePetPhoto(p.id); toast.success("Foto eliminada"); }}
-                        className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 text-white grid place-items-center text-sm shadow-md"
+                        onClick={(e) => { e.stopPropagation(); deletePetPhoto(p.id); toast.success("Foto eliminada"); }}
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white grid place-items-center text-sm shadow-md transition-colors z-20"
                         title="Eliminar"
                       >
                         <X className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => { updatePet(pet.id, { photo: p.photoUrl }); toast.success("Foto principal actualizada"); }}
-                        className="absolute bottom-2 left-2 flex items-center gap-1 h-6 px-2 rounded-full bg-emerald-600 text-white text-[10px] font-semibold shadow-md"
+                        onClick={(e) => { e.stopPropagation(); updatePet(livePet.id, { photo: p.photoUrl }); toast.success("Foto principal actualizada"); }}
+                        className="absolute bottom-2 left-2 flex items-center gap-1 h-6 px-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold shadow-md transition-colors z-20"
                         title="Foto del carné"
                       >
                         ⭐ Carné
                       </button>
                     </div>
                   ))}
+
+                  {!currentPhoto && photos.length === 0 && (
+                    <div className="col-span-2 sm:col-span-3 text-xs text-muted-foreground text-center py-6 border border-dashed rounded-xl">
+                      Aún no has subido fotografías. Usa el botón "Tomar foto" o "Subir archivo" para agregar la primera.
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {files.length > 0 && (
@@ -925,6 +969,14 @@ export function PetRecordViewer({
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* Visor de Fotografía en Pantalla Completa */}
+      <ImagePreviewDialog
+        open={!!viewerPhoto}
+        onOpenChange={(open) => !open && setViewerPhoto(null)}
+        src={viewerPhoto?.url}
+        title={viewerPhoto?.title}
+      />
     </div>
   );
 }
