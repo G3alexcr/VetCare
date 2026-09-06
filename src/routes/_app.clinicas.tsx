@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
-  Building2, Plus, Edit, Trash2, ShieldCheck, PauseCircle, PlayCircle, PawPrint, Users, DollarSign, HardDrive, Package, CheckCircle, LogIn,
+  Building2, Plus, Edit, Trash2, ShieldCheck, PauseCircle, PlayCircle, PawPrint, Users, DollarSign, HardDrive, Package, CheckCircle, LogIn, Globe,
 } from "lucide-react";
 import {
   addBranch, addClinic, addPlan, deleteBranch, deleteClinic, deletePlan,
@@ -158,6 +158,19 @@ function ClinicsTab({ clinics, plans, isSuper }: { clinics: Clinic[]; plans: Sub
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">{c.legalName} · {c.taxId}</div>
+                        {c.subdomain && (
+                          <div>
+                            <a
+                              href={`https://${c.subdomain}.go2vet.online`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-teal-600 hover:text-teal-700 hover:underline font-medium mt-0.5"
+                              title="Abrir sitio web de la clínica"
+                            >
+                              <Globe className="h-3 w-3" /> {c.subdomain}.go2vet.online
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TableCell>
@@ -224,6 +237,18 @@ function ClinicDialog({ editing, plans, onClose }: { editing: Clinic | null; pla
           <div className="space-y-1.5"><Label>Email</Label><Input value={form.email} onChange={(e) => set("email", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => set("phone", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>WhatsApp</Label><Input value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} /></div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>Subdominio Web de la clínica</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="ej: veterinariasanroque"
+                value={form.subdomain || ""}
+                onChange={(e) => set("subdomain", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              />
+              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-2 rounded-md border">.go2vet.online</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Tu página web se publicará automáticamente en esta dirección.</p>
+          </div>
           <div className="space-y-1.5 col-span-2"><Label>Dirección</Label><Input value={form.address} onChange={(e) => set("address", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Ciudad</Label><Input value={form.city} onChange={(e) => set("city", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>País</Label><Input value={form.country} onChange={(e) => set("country", e.target.value)} /></div>

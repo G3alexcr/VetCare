@@ -345,6 +345,13 @@ export async function hydrateClinics() {
 }
 
 export const addClinic = async (c: Omit<Clinic, "id" | "createdAt">) => {
+  const cleanSubdomain = (c.subdomain || c.name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 30);
+
   const row = {
     name: c.name,
     legal_name: c.legalName,
@@ -360,7 +367,7 @@ export const addClinic = async (c: Omit<Clinic, "id" | "createdAt">) => {
     currency: c.currency,
     plan_id: c.subscriptionPlanId || null,
     subscription_status: c.subscriptionStatus,
-    subdomain: c.subdomain || null,
+    subdomain: cleanSubdomain || null,
     opening_hours: c.openingHours,
     specialties: c.specialties ?? [],
     socials: c.socials ?? {},
@@ -376,6 +383,11 @@ export const addClinic = async (c: Omit<Clinic, "id" | "createdAt">) => {
       clinic_id: item.id,
       slug: item.subdomain,
       is_published: true,
+      identity: {
+        name: item.name,
+        logo_url: item.logoUrl || "",
+        slogan: "Cuidado profesional para tus mascotas",
+      },
     }, { onConflict: "clinic_id" }).then(() => {}).catch(console.error);
   }
   return item;
@@ -398,9 +410,19 @@ export const updateClinic = async (id: string, patch: Partial<Clinic>) => {
   if (patch.subscriptionPlanId !== undefined) row.plan_id = patch.subscriptionPlanId || null;
   if (patch.subscriptionStatus !== undefined) row.subscription_status = patch.subscriptionStatus;
   if (patch.subdomain !== undefined) {
-    row.subdomain = patch.subdomain || null;
-    if (patch.subdomain) {
-      void db.from("website_settings").update({ slug: patch.subdomain }).eq("clinic_id", id).then(() => {}).catch(console.error);
+    const cleanSubdomain = (patch.subdomain || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 30);
+    row.subdomain = cleanSubdomain || null;
+    if (cleanSubdomain) {
+      void db.from("website_settings").upsert({
+        clinic_id: id,
+        slug: cleanSubdomain,
+        is_published: true,
+      }, { onConflict: "clinic_id" }).then(() => {}).catch(console.error);
     }
   }
   if (patch.openingHours !== undefined) row.opening_hours = patch.openingHours;
