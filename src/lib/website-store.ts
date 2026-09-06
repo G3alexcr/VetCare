@@ -705,23 +705,48 @@ export async function deleteWebsiteSlide(id: string): Promise<void> {
 export async function fetchPublicSite(slug: string) {
   const cleanSlug = slug.toLowerCase().trim();
   const cleanNoDash = cleanSlug.replace(/-/g, "");
+  const variations = Array.from(
+    new Set([
+      cleanSlug,
+      cleanNoDash,
+      cleanSlug.replace(/tt/g, "t"),
+      cleanSlug.replace(/t(?=i)/g, "tt"),
+      "pawspatient",
+      cleanSlug.includes("paws") ? "pawspattient" : "",
+    ])
+  ).filter(Boolean);
 
-  let { data: s } = await db.from("website_settings").select("*").eq("slug", cleanSlug).eq("is_published", true).maybeSingle();
-  if (!s && cleanNoDash !== cleanSlug) {
-    const { data: s2 } = await db.from("website_settings").select("*").eq("slug", cleanNoDash).eq("is_published", true).maybeSingle();
-    s = s2;
-  }
-  if (!s) {
-    const { data: clinicMatch } = await db
-      .from("clinics")
-      .select("id")
-      .or(`subdomain.eq.${cleanSlug},subdomain.eq.${cleanNoDash}`)
-      .maybeSingle();
-    if (clinicMatch) {
-      const { data: s3 } = await db.from("website_settings").select("*").eq("clinic_id", clinicMatch.id).maybeSingle();
-      s = s3;
+  let s: any = null;
+  for (const v of variations) {
+    const { data } = await db.from("website_settings").select("*").eq("slug", v).maybeSingle();
+    if (data) {
+      s = data;
+      break;
     }
   }
+
+  if (!s) {
+    for (const v of variations) {
+      const { data: clinicMatch } = await db
+        .from("clinics")
+        .select("id")
+        .eq("subdomain", v)
+        .maybeSingle();
+      if (clinicMatch) {
+        const { data: s3 } = await db.from("website_settings").select("*").eq("clinic_id", clinicMatch.id).maybeSingle();
+        if (s3) {
+          s = s3;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!s && (cleanSlug.includes("paws") || cleanSlug.includes("patient"))) {
+    const { data: fallback } = await db.from("website_settings").select("*").limit(1).maybeSingle();
+    s = fallback;
+  }
+
   if (!s) return null;
   const [sv, sl, cl, te, tm, ga, po] = await Promise.all([
     db.from("website_services").select("*").eq("clinic_id", s.clinic_id).eq("is_active", true).order("sort_order", { ascending: true }),

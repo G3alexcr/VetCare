@@ -14,19 +14,21 @@ import {
 import { WebsiteRenderer } from "@/components/website-templates/WebsiteRenderer";
 
 import { LoginPage } from "./login";
+import { LandingPage } from "@/components/landing-page";
 
 /**
  * Ruta raíz ("/"):
- * - La raíz ES la aplicación directamente (Login unificado para Clientes, Staff y Administradores).
- * - Si tiene un subdominio de clínica específico, carga el sitio web de esa clínica.
+ * - app.go2vet.online ➔ Aplicación clínica veterinaria (LoginPage / Portal / Dashboard)
+ * - go2vet.online / www.go2vet.online ➔ Landing Page comercial de Go2Vet
+ * - *.go2vet.online (ej: pawspatient.go2vet.online) ➔ Sitio web público de la clínica
  */
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Go2Vet — Acceso a la Plataforma" },
+      { title: "Go2Vet — Software de Gestión Veterinaria en la Nube" },
       {
         name: "description",
-        content: "Acceso integral para clientes, propietarios y equipo veterinario.",
+        content: "Plataforma integral de gestión clínica, expediente digital, agenda, inventario y carné de pacientes.",
       },
     ],
   }),
@@ -35,19 +37,32 @@ export const Route = createFileRoute("/")({
 
 function RootPage() {
   const [subdomain, setSubdomain] = useState<string | null>(null);
+  const [isAppDomain, setIsAppDomain] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const slug = slugFromHost(window.location.hostname);
+      const host = window.location.hostname.toLowerCase();
+      // Si el host es app.go2vet.online o localhost
+      const isApp = host.startsWith("app.") || host.startsWith("app-") || host === "localhost" || host.includes("127.0.0.1");
+      setIsAppDomain(isApp);
+
+      const slug = slugFromHost(host);
       if (slug) setSubdomain(slug);
     }
   }, []);
 
+  // 1. Subdominio de clínica específica (ej: pawspatient.go2vet.online)
   if (subdomain) {
     return <ClinicWebsite />;
   }
 
-  return <LoginPage />;
+  // 2. Si es el subdominio de la app (app.go2vet.online)
+  if (isAppDomain) {
+    return <LoginPage />;
+  }
+
+  // 3. Dominio principal o www (go2vet.online / www.go2vet.online)
+  return <LandingPage />;
 }
 
 /** Renderiza el sitio público de la clínica cuando hay subdominio */
@@ -66,7 +81,7 @@ function ClinicWebsite() {
 
   useEffect(() => {
     let active = true;
-    const slug = slugFromHost(window.location.hostname) ?? "pawspattient";
+    const slug = slugFromHost(window.location.hostname) ?? "pawspatient";
     setLoading(true);
     fetchPublicSite(slug)
       .then((d) => {
