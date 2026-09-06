@@ -756,7 +756,11 @@ export function slugFromHost(hostname: string): string | null {
   }
   const parts = hostname.split(".");
   if (parts.length < 3) return null;
-  return parts[0];
+  const sub = parts[0].toLowerCase();
+  if (sub === "app" || sub === "www" || sub === "api" || sub === "admin") {
+    return null;
+  }
+  return sub;
 }
 
 registerHydrator(hydrateWebsite);
