@@ -36,28 +36,24 @@ export const Route = createFileRoute("/")({
 });
 
 function RootPage() {
-  const [subdomain, setSubdomain] = useState<string | null>(null);
-  const [isAppDomain, setIsAppDomain] = useState<boolean | null>(null);
+  const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const forcedView = params?.get("view");
+  const querySlug = params?.get("site") || params?.get("clinic");
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const host = window.location.hostname.toLowerCase();
-      // Si el host es app.go2vet.online o localhost
-      const isApp = host.startsWith("app.") || host.startsWith("app-") || host === "localhost" || host.includes("127.0.0.1");
-      setIsAppDomain(isApp);
+  const slug = querySlug || (typeof window !== "undefined" ? slugFromHost(host) : null);
+  const isApp = host.startsWith("app.") || host.startsWith("app-") || host === "localhost" || host.includes("127.0.0.1");
 
-      const slug = slugFromHost(host);
-      if (slug) setSubdomain(slug);
-    }
-  }, []);
+  if (forcedView === "landing") return <LandingPage />;
+  if (forcedView === "app") return <LoginPage />;
 
   // 1. Subdominio de clínica específica (ej: pawspatient.go2vet.online)
-  if (subdomain) {
-    return <ClinicWebsite />;
+  if (slug) {
+    return <ClinicWebsite forcedSlug={slug} />;
   }
 
   // 2. Si es el subdominio de la app (app.go2vet.online)
-  if (isAppDomain) {
+  if (isApp) {
     return <LoginPage />;
   }
 
@@ -66,7 +62,7 @@ function RootPage() {
 }
 
 /** Renderiza el sitio público de la clínica cuando hay subdominio */
-function ClinicWebsite() {
+function ClinicWebsite({ forcedSlug }: { forcedSlug?: string }) {
   const [data, setData] = useState<{
     settings: WebsiteSettings | null;
     services: WebsiteService[];
@@ -81,7 +77,7 @@ function ClinicWebsite() {
 
   useEffect(() => {
     let active = true;
-    const slug = slugFromHost(window.location.hostname) ?? "pawspatient";
+    const slug = forcedSlug || (typeof window !== "undefined" ? slugFromHost(window.location.hostname) : null) || "pawspatient";
     setLoading(true);
     fetchPublicSite(slug)
       .then((d) => {
@@ -96,7 +92,7 @@ function ClinicWebsite() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [forcedSlug]);
 
   if (loading) {
     return (
