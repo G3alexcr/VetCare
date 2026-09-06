@@ -8,6 +8,62 @@ import {
 } from "./mock-data";
 import { db } from "./supabase";
 import { registerHydrator } from "./db-hooks";
+import { toLocalDateStr } from "./utils";
+
+export function asUUID(id?: string): string {
+  if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return id;
+  }
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "00000000-0000-4000-8000-" + Math.random().toString(16).slice(2, 14).padEnd(12, "0");
+}
+
+export const STANDARD_HOURS = [
+  "08:30", "09:00", "09:30", "10:00", "10:30", "11:00",
+  "11:30", "14:00", "14:30", "15:00", "15:30", "16:00",
+  "16:30", "17:00", "17:30"
+];
+
+export function getLocalAppts(): TenantAppointment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    if (localStorage.getItem("go2vet_appointments_v1")) {
+      localStorage.removeItem("go2vet_appointments_v1");
+    }
+    const raw = localStorage.getItem("go2vet_appointments_v2");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalAppt(item: TenantAppointment) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getLocalAppts().filter((x) => x.id !== item.id);
+    localStorage.setItem("go2vet_appointments_v2", JSON.stringify([item, ...current]));
+  } catch {}
+}
+
+export function getLocalConsults(): LinkedConsultation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("go2vet_consultations_v1");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalConsult(item: LinkedConsultation) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getLocalConsults().filter((x) => x.id !== item.id);
+    localStorage.setItem("go2vet_consultations_v1", JSON.stringify([item, ...current]));
+  } catch {}
+}
 
 export type TenantAppointment = Appointment & { clinicId: string };
 export type LinkedConsultation = Consultation & { appointmentId?: string; clinicId: string };
@@ -98,6 +154,7 @@ export type Hospitalization = {
   ownerInstructions: string;
   dischargeMedications: string;
   followupDate: string;
+  followupTime?: string;
   status: HospitalizationStatus;
   clinicId: string;
   createdAt: string;
@@ -204,41 +261,7 @@ const LUNA_ID = "00000000-0000-0000-0000-0000000000b2";
 const MARIA_ID = "00000000-0000-0000-0000-00000000f101";
 const JUAN_ID = "00000000-0000-0000-0000-00000000f102";
 
-export const SEED_APPOINTMENTS: TenantAppointment[] = [
-  {
-    id: "00000000-0000-0000-0000-00000000f401",
-    clinicId: CLINIC_A1,
-    date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-    time: "09:30",
-    clientId: MARIA_ID,
-    petId: ROCKY_ID,
-    vetId: "f201",
-    reason: "Control de peso y revisión general",
-    status: "Confirmada",
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f402",
-    clinicId: CLINIC_A1,
-    date: new Date().toISOString().split("T")[0],
-    time: "10:00",
-    clientId: JUAN_ID,
-    petId: LUNA_ID,
-    vetId: "f202",
-    reason: "Vacunación anual",
-    status: "Pendiente",
-  },
-  {
-    id: "00000000-0000-0000-0000-00000000f403",
-    clinicId: CLINIC_A1,
-    date: new Date(Date.now() - 12 * 86400000).toISOString().split("T")[0],
-    time: "15:00",
-    clientId: MARIA_ID,
-    petId: ROCKY_ID,
-    vetId: "f201",
-    reason: "Consulta por alergia cutánea",
-    status: "Finalizada",
-  },
-];
+export const SEED_APPOINTMENTS: TenantAppointment[] = [];
 
 export const SEED_CONSULTATIONS: LinkedConsultation[] = [
   {
@@ -431,8 +454,8 @@ function mergeWithSeed<T extends { id: string }>(fetched: T[], seed: T[]): T[] {
 }
 
 let state: State = {
-  appointments: SEED_APPOINTMENTS,
-  consultations: SEED_CONSULTATIONS,
+  appointments: mergeWithSeed(getLocalAppts(), SEED_APPOINTMENTS),
+  consultations: mergeWithSeed(getLocalConsults(), SEED_CONSULTATIONS),
   vaccines: SEED_VACCINES,
   dewormings: SEED_DEWORMINGS,
   surgeries: SEED_SURGERIES,
@@ -482,38 +505,47 @@ export async function hydrateClinic(_clinicId: string): Promise<void> {
     );
   }
 
+  const localAppts = getLocalAppts();
+  const localConsults = getLocalConsults();
+
   setState((s) => ({
     ...s,
     appointments: mergeWithSeed(
-      (a.data ?? []).map((r) => ({
-        id: String(r.id),
-        date: String(r.date ?? ""),
-        time: String(r.time ?? ""),
-        clientId: String(r.client_id ?? ""),
-        petId: String(r.pet_id ?? ""),
-        vetId: String(r.vet_id ?? ""),
-        reason: String(r.reason ?? ""),
-        status: (r.status as AppointmentStatus) ?? "Pendiente",
-        clinicId: String(r.clinic_id),
-      })),
+      mergeWithSeed(
+        (a.data ?? []).map((r) => ({
+          id: String(r.id),
+          date: toLocalDateStr(r.date),
+          time: String(r.time ?? ""),
+          clientId: String(r.client_id ?? ""),
+          petId: String(r.pet_id ?? ""),
+          vetId: String(r.vet_id ?? ""),
+          reason: String(r.reason ?? ""),
+          status: (r.status as AppointmentStatus) ?? "Pendiente",
+          clinicId: String(r.clinic_id),
+        })),
+        localAppts
+      ),
       SEED_APPOINTMENTS
     ),
     consultations: mergeWithSeed(
-      (c.data ?? []).map((r) => ({
-        id: String(r.id),
-        date: String(r.date ?? ""),
-        vetId: String(r.vet_id ?? ""),
-        petId: String(r.pet_id ?? ""),
-        reason: String(r.reason ?? ""),
-        weight: Number(r.weight ?? 0),
-        temperature: Number(r.temperature ?? 0),
-        diagnosis: String(r.diagnosis ?? ""),
-        treatment: String(r.treatment ?? ""),
-        medications: String(r.medications ?? ""),
-        notes: String(r.notes ?? ""),
-        appointmentId: r.appointment_id ? String(r.appointment_id) : undefined,
-        clinicId: String(r.clinic_id),
-      })),
+      mergeWithSeed(
+        (c.data ?? []).map((r) => ({
+          id: String(r.id),
+          date: toLocalDateStr(r.date),
+          vetId: String(r.vet_id ?? ""),
+          petId: String(r.pet_id ?? ""),
+          reason: String(r.reason ?? ""),
+          weight: Number(r.weight ?? 0),
+          temperature: Number(r.temperature ?? 0),
+          diagnosis: String(r.diagnosis ?? ""),
+          treatment: String(r.treatment ?? ""),
+          medications: String(r.medications ?? ""),
+          notes: String(r.notes ?? ""),
+          appointmentId: r.appointment_id ? String(r.appointment_id) : undefined,
+          clinicId: String(r.clinic_id),
+        })),
+        localConsults
+      ),
       SEED_CONSULTATIONS
     ),
     vaccines: mergeWithSeed(
@@ -726,7 +758,14 @@ export function deleteHospitalization(id: string) {
 }
 export function dischargeHospitalization(
   id: string,
-  data: { dischargeDate: string; dischargeSummary: string; ownerInstructions: string; dischargeMedications: string; followupDate: string }
+  data: {
+    dischargeDate: string;
+    dischargeSummary: string;
+    ownerInstructions: string;
+    dischargeMedications: string;
+    followupDate: string;
+    followupTime?: string;
+  }
 ) {
   updateHospitalization(id, { ...data, status: "Alta médica" });
 }
@@ -1047,55 +1086,88 @@ export function getVaccineStatus(nextDueDate: string): { label: VaccineStatus; d
 }
 
 export function addAppointment(a: Appointment) {
-  const item: TenantAppointment = { ...a, clinicId: getCurrentClinicId() };
-  setState((s) => ({ ...s, appointments: [...s.appointments, item] }));
-  void Promise.resolve(db.from("appointments").insert({
-    id: item.id,
-    clinic_id: item.clinicId,
-    date: item.date,
-    time: item.time,
-    client_id: item.clientId,
-    pet_id: item.petId,
-    vet_id: item.vetId,
-    reason: item.reason,
-    status: item.status,
-  })).then(() => {}).catch((e) => console.error(e));
-}
-export function updateAppointmentStatus(id: string, status: AppointmentStatus) {
+  const finalId = asUUID(a.id);
+  const finalDate = toLocalDateStr(a.date);
+  const item: TenantAppointment = {
+    ...a,
+    id: finalId,
+    date: finalDate,
+    clinicId: getCurrentClinicId(),
+  };
+
+  saveLocalAppt(item);
   setState((s) => ({
     ...s,
-    appointments: s.appointments.map((a) => (a.id === id ? { ...a, status } : a)),
+    appointments: [item, ...s.appointments.filter((x) => x.id !== item.id)],
   }));
+
+  void Promise.resolve(
+    db.from("appointments").insert({
+      id: item.id,
+      clinic_id: item.clinicId,
+      date: item.date,
+      time: item.time,
+      client_id: item.clientId ? asUUID(item.clientId) : null,
+      pet_id: item.petId ? asUUID(item.petId) : null,
+      vet_id: item.vetId || null,
+      reason: item.reason,
+      status: item.status,
+    })
+  ).then((res) => {
+    if (res?.error) console.error("[store] Supabase appointment insert error:", res.error);
+  }).catch((e) => console.error(e));
+}
+
+export function updateAppointmentStatus(id: string, status: AppointmentStatus) {
+  setState((s) => {
+    const updated = s.appointments.map((a) => (a.id === id ? { ...a, status } : a));
+    const target = updated.find((a) => a.id === id);
+    if (target) saveLocalAppt(target);
+    return { ...s, appointments: updated };
+  });
   void Promise.resolve(db.from("appointments").update({ status }).eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
+
 export function updateAppointment(id: string, patch: Partial<Appointment>) {
-  setState((s) => ({
-    ...s,
-    appointments: s.appointments.map((a) => (a.id === id ? { ...a, ...patch } : a)),
-  }));
+  setState((s) => {
+    const updated = s.appointments.map((a) => (a.id === id ? { ...a, ...patch } : a));
+    const target = updated.find((a) => a.id === id);
+    if (target) saveLocalAppt(target);
+    return { ...s, appointments: updated };
+  });
   const row: Record<string, unknown> = {};
-  if (patch.date !== undefined) row.date = patch.date;
+  if (patch.date !== undefined) row.date = toLocalDateStr(patch.date);
   if (patch.time !== undefined) row.time = patch.time;
-  if (patch.clientId !== undefined) row.client_id = patch.clientId;
-  if (patch.petId !== undefined) row.pet_id = patch.petId;
+  if (patch.clientId !== undefined) row.client_id = patch.clientId ? asUUID(patch.clientId) : null;
+  if (patch.petId !== undefined) row.pet_id = patch.petId ? asUUID(patch.petId) : null;
   if (patch.vetId !== undefined) row.vet_id = patch.vetId;
   if (patch.reason !== undefined) row.reason = patch.reason;
   if (patch.status !== undefined) row.status = patch.status;
   void Promise.resolve(db.from("appointments").update(row).eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
+
 export function deleteAppointment(id: string) {
+  if (typeof window !== "undefined") {
+    try {
+      const filtered = getLocalAppts().filter((x) => x.id !== id);
+      localStorage.setItem("go2vet_appointments_v2", JSON.stringify(filtered));
+    } catch {}
+  }
   setState((s) => ({ ...s, appointments: s.appointments.filter((a) => a.id !== id) }));
   void Promise.resolve(db.from("appointments").delete().eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
+
 export function updateConsultation(id: string, patch: Partial<LinkedConsultation>) {
-  setState((s) => ({
-    ...s,
-    consultations: s.consultations.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-  }));
+  setState((s) => {
+    const updated = s.consultations.map((c) => (c.id === id ? { ...c, ...patch } : c));
+    const target = updated.find((c) => c.id === id);
+    if (target) saveLocalConsult(target);
+    return { ...s, consultations: updated };
+  });
   const row: Record<string, unknown> = {};
-  if (patch.date !== undefined) row.date = patch.date;
+  if (patch.date !== undefined) row.date = toLocalDateStr(patch.date);
   if (patch.vetId !== undefined) row.vet_id = patch.vetId;
-  if (patch.petId !== undefined) row.pet_id = patch.petId;
+  if (patch.petId !== undefined) row.pet_id = patch.petId ? asUUID(patch.petId) : null;
   if (patch.reason !== undefined) row.reason = patch.reason;
   if (patch.weight !== undefined) row.weight = Number(patch.weight);
   if (patch.temperature !== undefined) row.temperature = Number(patch.temperature);
@@ -1103,32 +1175,114 @@ export function updateConsultation(id: string, patch: Partial<LinkedConsultation
   if (patch.treatment !== undefined) row.treatment = patch.treatment;
   if (patch.medications !== undefined) row.medications = patch.medications;
   if (patch.notes !== undefined) row.notes = patch.notes;
-  if (patch.appointmentId !== undefined) row.appointment_id = patch.appointmentId || null;
+  if (patch.appointmentId !== undefined) row.appointment_id = patch.appointmentId ? asUUID(patch.appointmentId) : null;
   if (patch.clinicId !== undefined) row.clinic_id = patch.clinicId;
   void Promise.resolve(db.from("consultations").update(row).eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
+
 export function deleteConsultation(id: string) {
+  if (typeof window !== "undefined") {
+    try {
+      const filtered = getLocalConsults().filter((x) => x.id !== id);
+      localStorage.setItem("go2vet_consultations_v1", JSON.stringify(filtered));
+    } catch {}
+  }
   setState((s) => ({ ...s, consultations: s.consultations.filter((c) => c.id !== id) }));
   void Promise.resolve(db.from("consultations").delete().eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
-export function addConsultation(c: Omit<LinkedConsultation, "clinicId">) {
-  const item: LinkedConsultation = { ...c, clinicId: getCurrentClinicId() };
-  setState((s) => ({ ...s, consultations: [item, ...s.consultations] }));
-  void Promise.resolve(db.from("consultations").insert({
-    id: item.id,
-    clinic_id: item.clinicId,
-    date: item.date,
-    vet_id: item.vetId,
-    pet_id: item.petId,
-    reason: item.reason,
-    weight: Number(item.weight),
-    temperature: Number(item.temperature),
-    diagnosis: item.diagnosis,
-    treatment: item.treatment,
-    medications: item.medications,
-    notes: item.notes,
-    appointment_id: item.appointmentId || null,
-  })).then(() => {}).catch((e) => console.error(e));
+
+export function addConsultation(c: Omit<LinkedConsultation, "clinicId"> & { clientId?: string }) {
+  const clinicId = getCurrentClinicId();
+  const finalId = asUUID(c.id);
+  const finalDate = toLocalDateStr(c.date);
+  let appointmentId = c.appointmentId ? asUUID(c.appointmentId) : undefined;
+  const s = state;
+  let newAppointment: TenantAppointment | null = null;
+
+  if (!appointmentId) {
+    const existing = s.appointments.find(
+      (a) => a.petId === c.petId && a.date === finalDate && a.status !== "Cancelada"
+    );
+    if (existing) {
+      appointmentId = existing.id;
+    } else {
+      const pet = s.pets.find((p) => p.id === c.petId);
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      newAppointment = {
+        id: asUUID(),
+        clinicId,
+        date: finalDate,
+        time: timeStr,
+        clientId: c.clientId || pet?.clientId || "",
+        petId: c.petId,
+        vetId: c.vetId,
+        reason: c.reason || "Consulta médica",
+        status: "Finalizada",
+      };
+      appointmentId = newAppointment.id;
+      saveLocalAppt(newAppointment);
+    }
+  }
+
+  const item: LinkedConsultation = {
+    ...c,
+    id: finalId,
+    date: finalDate,
+    appointmentId,
+    clinicId,
+  };
+  saveLocalConsult(item);
+
+  setState((st) => ({
+    ...st,
+    consultations: [item, ...st.consultations.filter((x) => x.id !== item.id)],
+    appointments: newAppointment
+      ? [newAppointment, ...st.appointments.filter((x) => x.id !== newAppointment.id)]
+      : appointmentId
+      ? st.appointments.map((a) => (a.id === appointmentId ? { ...a, status: "Finalizada" as AppointmentStatus } : a))
+      : st.appointments,
+  }));
+
+  if (newAppointment) {
+    void Promise.resolve(
+      db.from("appointments").insert({
+        id: newAppointment.id,
+        clinic_id: newAppointment.clinicId,
+        date: newAppointment.date,
+        time: newAppointment.time,
+        client_id: newAppointment.clientId ? asUUID(newAppointment.clientId) : null,
+        pet_id: newAppointment.petId ? asUUID(newAppointment.petId) : null,
+        vet_id: newAppointment.vetId || null,
+        reason: newAppointment.reason,
+        status: newAppointment.status,
+      })
+    ).then((res) => {
+      if (res?.error) console.error("[store] appointment insert error:", res.error);
+    }).catch((e) => console.error(e));
+  } else if (appointmentId) {
+    void Promise.resolve(db.from("appointments").update({ status: "Finalizada" }).eq("id", appointmentId)).catch((e) => console.error(e));
+  }
+
+  void Promise.resolve(
+    db.from("consultations").insert({
+      id: item.id,
+      clinic_id: item.clinicId,
+      date: item.date,
+      vet_id: item.vetId || null,
+      pet_id: item.petId ? asUUID(item.petId) : null,
+      reason: item.reason,
+      weight: Number(item.weight),
+      temperature: Number(item.temperature),
+      diagnosis: item.diagnosis,
+      treatment: item.treatment,
+      medications: item.medications,
+      notes: item.notes,
+      appointment_id: item.appointmentId ? asUUID(item.appointmentId) : null,
+    })
+  ).then((res) => {
+    if (res?.error) console.error("[store] consultation insert error:", res.error);
+  }).catch((e) => console.error(e));
 }
 export function addConsultationFromAppointment(
   c: Omit<LinkedConsultation, "id" | "appointmentId" | "clinicId">,

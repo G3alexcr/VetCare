@@ -1290,9 +1290,9 @@ export function VetCareAIFloating() {
     <>
       <button
         onClick={() => openVetCareAI(panel.tool, panel.petId)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2.5 shadow-lg hover:shadow-xl hover:scale-[1.03] transition-all text-sm font-medium"
+        className="fixed bottom-14 sm:bottom-16 right-4 sm:right-6 z-40 flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2.5 shadow-lg hover:shadow-xl hover:scale-[1.03] transition-all text-sm font-medium"
       >
-        <Sparkles className="h-4 w-4" /> VetCare AI
+        <Sparkles className="h-4 w-4" /> Go2Vet AI
       </button>
 
       <Sheet open={panel.open} onOpenChange={(o) => !o && closeVetCareAI()}>
@@ -1302,7 +1302,7 @@ export function VetCareAIFloating() {
               <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary grid place-items-center">
                 <Sparkles className="h-4 w-4" />
               </div>
-              VetCare AI
+              Go2Vet AI
               <Badge variant="secondary" className="text-[10px] font-normal">Asistente clínico</Badge>
             </SheetTitle>
           </SheetHeader>

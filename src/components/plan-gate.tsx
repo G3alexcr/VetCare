@@ -29,7 +29,7 @@ export function PlanGate({ planKey, title, description, children }: Props) {
         </h2>
         <p className="text-sm text-muted-foreground">
           {description ??
-            `El módulo de ${featureName} no está incluido en tu plan actual (${caps.plan?.name ?? "—"}). Mejora tu plan para desbloquearlo y sacarle el máximo partido a VetCare.`}
+            `El módulo de ${featureName} no está incluido en tu plan actual (${caps.plan?.name ?? "—"}). Mejora tu plan para desbloquearlo y sacarle el máximo partido a Go2Vet.`}
         </p>
         {caps.plan && (
           <div className="rounded-lg border p-3 text-sm text-left space-y-1">

@@ -13,6 +13,7 @@ import {
   type WebsiteGroupItem, type WebsiteTestimonial, type WebsiteGalleryItem, type WebsitePost 
 } from '@/lib/website-store';
 import { GovetLogo } from './GovetLogo';
+import { AppFooter } from '@/components/AppFooter';
 
 interface Props {
   settings: WebsiteSettings;
@@ -41,18 +42,16 @@ export function GovetRenderer({ settings, services, slides, clinic, team, testim
 
   const id = settings.identity;
   const ct = settings.contact;
-  const clinicName = (id.name && !id.name.toLowerCase().includes("vetcare")) 
-    ? id.name 
-    : (clinic?.name && !clinic.name.toLowerCase().includes("vetcare") ? clinic.name : "Govet");
+  const clinicName = id.name?.trim() || clinic?.name?.trim() || "Paws Pattient";
 
   const cleanSlideTitle = (title: string) => {
     if (!title) return `Especialidades Médicas ${clinicName}`;
-    return title.replace(/VetCare(\s*San\s*Jos[eé])?/gi, clinicName || "Govet");
+    return title.replace(/VetCare(\s*San\s*Jos[eé])?/gi, clinicName).replace(/Govet/gi, clinicName);
   };
 
   const cleanSlideSubtitle = (sub: string) => {
     if (!sub) return "";
-    return sub.replace(/VetCare(\s*San\s*Jos[eé])?/gi, clinicName || "Govet");
+    return sub.replace(/VetCare(\s*San\s*Jos[eé])?/gi, clinicName).replace(/Govet/gi, clinicName);
   };
 
   // Configuración dinámica y visibilidad de los Planes de Salud
@@ -288,7 +287,7 @@ export function GovetRenderer({ settings, services, slides, clinic, team, testim
                 </span>
               </div>
             ) : (
-              <GovetLogo size="md" />
+              <GovetLogo size="md" name={clinicName} tagline={id.tagline || "Centro de Especialidades"} />
             )}
           </div>
 
@@ -1329,19 +1328,8 @@ export function GovetRenderer({ settings, services, slides, clinic, team, testim
         </div>
       )}
 
-      {/* Footer básico de Govet */}
-      <footer className="bg-slate-900 text-white py-12 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <GovetLogo size="sm" />
-          <div className="text-xs text-slate-400 text-center sm:text-right">
-            © {new Date().getFullYear()} {clinicName}. Todos los derechos reservados.
-            <div className="text-[11px] text-slate-500 mt-1">
-              Atención médica de alta especialidad veterinaria.
-            </div>
-          </div>
-        </div>
-      </footer>
-
+      {/* Footer completo de Go2Vet y Clínica */}
+      <AppFooter />
     </div>
   );
 }

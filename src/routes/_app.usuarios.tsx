@@ -111,7 +111,9 @@ function initials(name: string) {
 
 export function UsuariosPage() {
   const users = useRbacUsers();
-  const roles = useRoles();
+  const allRoles = useRoles();
+  // El Super Administrador no es un rol de clínica
+  const roles = useMemo(() => allRoles.filter((r) => r.id !== "role_super"), [allRoles]);
 
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("todos");

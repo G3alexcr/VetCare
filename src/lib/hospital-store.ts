@@ -74,12 +74,51 @@ type State = {
   plans: Array<TreatmentPlan & { clinicId: string }>;
 };
 
-let state: State = { rooms: [], care: [], meds: [], plans: [] };
+const STORAGE_KEY = "go2vet_hospital_v1";
+
+const SEED_ROOMS: Array<HospitalRoom & { clinicId: string }> = [
+  { id: "r_seed_1", code: "J-01", type: "Jaula", status: "Disponible", capacity: 1, location: "Ala General", size: "Mediana", notes: "Jaula estándar para perros medianos y felinos", clinicId: "cl1", createdAt: new Date().toISOString() },
+  { id: "r_seed_2", code: "J-02", type: "Jaula", status: "Disponible", capacity: 1, location: "Ala General", size: "Grande", notes: "Jaula amplia para caninos grandes", clinicId: "cl1", createdAt: new Date().toISOString() },
+  { id: "r_seed_3", code: "J-03", type: "Jaula", status: "Disponible", capacity: 1, location: "Ala Felina", size: "Pequeña", notes: "Ambiente silencioso cat-friendly", clinicId: "cl1", createdAt: new Date().toISOString() },
+  { id: "r_seed_4", code: "J-04", type: "Jaula", status: "Disponible", capacity: 1, location: "Ala Felina", size: "Pequeña", notes: "Ambiente silencioso cat-friendly", clinicId: "cl1", createdAt: new Date().toISOString() },
+  { id: "r_seed_5", code: "UCI-01", type: "UCI", status: "Disponible", capacity: 1, location: "Área Crítica", size: "Mediana", notes: "Con toma de oxígeno y soporte vital", clinicId: "cl1", createdAt: new Date().toISOString() },
+  { id: "r_seed_6", code: "AIS-01", type: "Aislamiento", status: "Disponible", capacity: 1, location: "Infecciosos", size: "Grande", notes: "Protocolo de bioseguridad / cuarentena", clinicId: "cl1", createdAt: new Date().toISOString() },
+];
+
+function loadInitialState(): State {
+  if (typeof window === "undefined") {
+    return { rooms: SEED_ROOMS, care: [], meds: [], plans: [] };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.rooms) && parsed.rooms.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Error cargando hospital-store:", err);
+  }
+  return { rooms: SEED_ROOMS, care: [], meds: [], plans: [] };
+}
+
+let state: State = loadInitialState();
 
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
 const emit = () => listeners.forEach((l) => l());
-const setState = (u: (s: State) => State) => { state = u(state); emit(); };
+const setState = (u: (s: State) => State) => {
+  state = u(state);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error("Error guardando hospital-store:", e);
+    }
+  }
+  emit();
+};
 
 const uid = (p: string) => `${p}${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 

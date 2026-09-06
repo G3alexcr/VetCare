@@ -45,12 +45,14 @@ function statusColor(s: UserStatus) {
 }
 
 function RolesPage() {
-  const roles = useRoles();
+  const allRoles = useRoles();
+  // El Super Administrador es el dueño de la app a nivel global y no es un rol asignable ni configurable por una clínica.
+  const roles = useMemo(() => allRoles.filter((r) => r.id !== "role_super"), [allRoles]);
   const users = useRbacUsers();
   const audit = useAuditLog();
   const can = useCan();
 
-  const [selectedRoleId, setSelectedRoleId] = useState<string>(roles[0]?.id ?? "");
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(roles[0]?.id ?? "role_owner");
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? roles[0];
 
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
@@ -58,7 +60,7 @@ function RolesPage() {
 
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [userForm, setUserForm] = useState<{ id?: string; name: string; email: string; phone: string; roleId: string; status: UserStatus; branchId: string }>(
-    { name: "", email: "", phone: "", roleId: roles[0]?.id ?? "", status: "Activo", branchId: "" }
+    { name: "", email: "", phone: "", roleId: roles[0]?.id ?? "role_owner", status: "Activo", branchId: "" }
   );
 
   const permCounts = useMemo(() => {

@@ -27,7 +27,7 @@ import {
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/ajustes")({
-  head: () => ({ meta: [{ title: "Ajustes de la Aplicación — VetCare" }] }),
+  head: () => ({ meta: [{ title: "Ajustes de la Aplicación — Go2Vet" }] }),
   component: AjustesPageWrapper,
 });
 

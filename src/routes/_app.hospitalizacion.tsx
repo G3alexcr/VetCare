@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AppLayout } from "@/components/app-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   Activity,
   AlertTriangle,
   Bed,
+  Calendar,
   Clock,
   Hospital,
   LogOut,
@@ -58,8 +59,12 @@ import {
   useHospitalizations,
   addHospitalization,
   dischargeHospitalization,
+  useAppointments,
+  addAppointment,
+  STANDARD_HOURS,
   type Hospitalization,
 } from "@/lib/store";
+import { toLocalDateStr } from "@/lib/utils";
 import { usePets } from "@/lib/pets-store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
 import { Can, useCan } from "@/lib/rbac";
@@ -253,6 +258,7 @@ function NewAdmissionDialog({
   const vets = useVeterinarios();
   const [petId, setPetId] = useState(pets[0]?.id ?? "");
   const [roomId, setRoomId] = useState<string>("");
+  const [quickRoomOpen, setQuickRoomOpen] = useState(false);
   const available = rooms.filter((r) => r.status === "Disponible");
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -311,14 +317,36 @@ function NewAdmissionDialog({
             <datalist id="vets-adm">{vets.map((v) => <option key={v.id} value={v.nombre} />)}</datalist>
           </div>
           <div className="space-y-2">
-            <Label>Asignar jaula/habitación</Label>
+            <div className="flex items-center justify-between">
+              <Label>Asignar jaula/habitación</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[11px] text-primary gap-1 hover:bg-primary/10"
+                onClick={() => setQuickRoomOpen(true)}
+              >
+                <Plus className="h-3 w-3" /> Crear jaula
+              </Button>
+            </div>
             <Select value={roomId} onValueChange={setRoomId}>
-              <SelectTrigger><SelectValue placeholder="Ninguna" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Sin jaula asignada (ninguna)" />
+              </SelectTrigger>
               <SelectContent>
-                {available.length === 0 && <SelectItem value="none" disabled>Sin jaulas libres</SelectItem>}
-                {available.map((r) => <SelectItem key={r.id} value={r.id}>{r.code} · {r.type}</SelectItem>)}
+                <SelectItem value="none">Sin jaula asignada</SelectItem>
+                {available.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.code} · {r.type} {r.size ? `(${r.size})` : ""}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {available.length === 0 && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                No hay jaulas disponibles. Puedes ingresar al paciente sin jaula o hacer clic en "Crear jaula".
+              </p>
+            )}
           </div>
           <div className="space-y-2 col-span-2">
             <Label htmlFor="reason">Motivo</Label>
@@ -338,6 +366,15 @@ function NewAdmissionDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <RoomForm
+        open={quickRoomOpen}
+        onOpenChange={setQuickRoomOpen}
+        editing={null}
+        onCreated={(newRoom) => {
+          setRoomId(newRoom.id);
+        }}
+      />
     </Dialog>
   );
 }
@@ -665,35 +702,223 @@ function PlanForm({ hospId }: { hospId: string }) {
 function DischargeInline({
   open, onClose, hosp, room,
 }: { open: boolean; onClose: () => void; hosp: Hospitalization; room?: HospitalRoom }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const appointments = useAppointments();
+  const pets = usePets();
+  const vets = useVeterinarios();
+
+  const today = toLocalDateStr(new Date());
+  const [dischargeDate, setDischargeDate] = useState(today);
+  const [followupDate, setFollowupDate] = useState("");
+  const [followupTime, setFollowupTime] = useState("");
+  const [dischargeSummary, setDischargeSummary] = useState("");
+  const [ownerInstructions, setOwnerInstructions] = useState("");
+  const [dischargeMedications, setDischargeMedications] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setDischargeDate(toLocalDateStr(new Date()));
+      setFollowupDate("");
+      setFollowupTime("");
+      setDischargeSummary("");
+      setOwnerInstructions("");
+      setDischargeMedications("");
+    }
+  }, [open]);
+
+  const bookedHours = useMemo(() => {
+    if (!followupDate) return new Set<string>();
+    return new Set(
+      appointments
+        .filter((a) => a.date === followupDate && a.status !== "Cancelada")
+        .map((a) => a.time)
+    );
+  }, [appointments, followupDate]);
+
+  const availableHours = useMemo(() => {
+    if (!followupDate) return [];
+    const now = new Date();
+    const todayStr = toLocalDateStr(now);
+    const currentHourStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return STANDARD_HOURS.filter((h) => {
+      if (bookedHours.has(h)) return false;
+      if (followupDate === todayStr && h <= currentHourStr) return false;
+      return true;
+    });
+  }, [followupDate, bookedHours]);
+
+  useEffect(() => {
+    if (followupDate) {
+      if (availableHours.length > 0) {
+        if (!followupTime || !availableHours.includes(followupTime)) {
+          setFollowupTime(availableHours[0]);
+        }
+      } else {
+        setFollowupTime("");
+      }
+    } else {
+      setFollowupTime("");
+    }
+  }, [followupDate, availableHours, followupTime]);
+
+  const pet = pets.find((p) => p.id === hosp.petId);
+  const assignedVet =
+    vets.find((v) => v.nombre === hosp.veterinarian || v.id === hosp.veterinarian) || vets[0];
+
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const v = Object.fromEntries(fd.entries()) as Record<string, string>;
+
+    if (followupDate && !followupTime) {
+      toast.error("Por favor selecciona una hora disponible para el control o borra la fecha.");
+      return;
+    }
+
     dischargeHospitalization(hosp.id, {
-      dischargeDate: v.dischargeDate,
-      dischargeSummary: v.dischargeSummary ?? "",
-      ownerInstructions: v.ownerInstructions ?? "",
-      dischargeMedications: v.dischargeMedications ?? "",
-      followupDate: v.followupDate ?? "",
+      dischargeDate,
+      dischargeSummary,
+      ownerInstructions,
+      dischargeMedications,
+      followupDate,
+      followupTime: followupDate ? followupTime : undefined,
     });
+
     if (room) releaseRoom(room.id);
-    toast.success("Paciente dado de alta");
+
+    if (followupDate && followupTime) {
+      addAppointment({
+        id: crypto.randomUUID(),
+        date: followupDate,
+        time: followupTime,
+        clientId: pet?.clientId || "",
+        petId: hosp.petId,
+        vetId: assignedVet?.id || "",
+        reason: `Control post-hospitalización · ${pet?.name || "Paciente"}`,
+        status: "Confirmada",
+      });
+      toast.success(
+        `Paciente dado de alta y control agendado para el ${followupDate} a las ${followupTime} hrs.`
+      );
+    } else {
+      toast.success("Paciente dado de alta médica exitosamente.");
+    }
+
     onClose();
   };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl">
-        <DialogHeader><DialogTitle>Dar de alta</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="grid grid-cols-2 gap-3">
-          <div className="space-y-2"><Label htmlFor="dischargeDate">Fecha alta</Label><Input id="dischargeDate" name="dischargeDate" type="date" required defaultValue={today} /></div>
-          <div className="space-y-2"><Label htmlFor="followupDate">Próximo control</Label><Input id="followupDate" name="followupDate" type="date" /></div>
-          <div className="space-y-2 col-span-2"><Label htmlFor="dischargeSummary">Resumen clínico</Label><Textarea id="dischargeSummary" name="dischargeSummary" rows={2} /></div>
-          <div className="space-y-2 col-span-2"><Label htmlFor="ownerInstructions">Indicaciones al propietario</Label><Textarea id="ownerInstructions" name="ownerInstructions" rows={2} /></div>
-          <div className="space-y-2 col-span-2"><Label htmlFor="dischargeMedications">Medicamentos enviados</Label><Textarea id="dischargeMedications" name="dischargeMedications" rows={2} /></div>
-          <DialogFooter className="col-span-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit">Confirmar alta</Button>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <LogOut className="h-5 w-5 text-primary" /> Dar de alta al paciente
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="grid grid-cols-2 gap-3 pt-1">
+          <div className="space-y-2">
+            <Label htmlFor="dischargeDate">Fecha de alta</Label>
+            <Input
+              id="dischargeDate"
+              name="dischargeDate"
+              type="date"
+              required
+              value={dischargeDate}
+              onChange={(e) => setDischargeDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="followupDate">Próximo control (Fecha)</Label>
+            <Input
+              id="followupDate"
+              name="followupDate"
+              type="date"
+              min={dischargeDate || today}
+              value={followupDate}
+              onChange={(e) => setFollowupDate(e.target.value)}
+            />
+          </div>
+
+          {followupDate && (
+            <div className="space-y-2 col-span-2 p-3 bg-muted/40 rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="followupTime" className="text-xs font-semibold flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  Hora del próximo control (Rango de atención de la clínica)
+                </Label>
+                {availableHours.length > 0 && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    {availableHours.length} turno(s) libre(s) sin colisión
+                  </span>
+                )}
+              </div>
+
+              {availableHours.length > 0 ? (
+                <>
+                  <Select value={followupTime} onValueChange={setFollowupTime}>
+                    <SelectTrigger id="followupTime" className="bg-background">
+                      <SelectValue placeholder="Selecciona una hora disponible" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableHours.map((hour) => (
+                        <SelectItem key={hour} value={hour}>
+                          {hour} hrs — Turno disponible
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Este turno se reservará de inmediato en la Agenda para evitar duplicidades o choques con otras citas médicas.
+                  </p>
+                </>
+              ) : (
+                <div className="p-2.5 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs">
+                  ⚠️ No hay turnos disponibles en el horario regular de la clínica para el {followupDate}. Por favor selecciona otra fecha para el control.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-2 col-span-2">
+            <Label htmlFor="dischargeSummary">Resumen clínico de salida</Label>
+            <Textarea
+              id="dischargeSummary"
+              name="dischargeSummary"
+              rows={2}
+              value={dischargeSummary}
+              onChange={(e) => setDischargeSummary(e.target.value)}
+              placeholder="Evolución durante la estancia, diagnóstico de salida..."
+            />
+          </div>
+          <div className="space-y-2 col-span-2">
+            <Label htmlFor="ownerInstructions">Indicaciones al tutor / propietario</Label>
+            <Textarea
+              id="ownerInstructions"
+              name="ownerInstructions"
+              rows={2}
+              value={ownerInstructions}
+              onChange={(e) => setOwnerInstructions(e.target.value)}
+              placeholder="Cuidados especiales, reposo, dieta, signos de alerta..."
+            />
+          </div>
+          <div className="space-y-2 col-span-2">
+            <Label htmlFor="dischargeMedications">Medicamentos recetados</Label>
+            <Textarea
+              id="dischargeMedications"
+              name="dischargeMedications"
+              rows={2}
+              value={dischargeMedications}
+              onChange={(e) => setDischargeMedications(e.target.value)}
+              placeholder="Medicamentos, dosis y horarios prescritos..."
+            />
+          </div>
+          <DialogFooter className="col-span-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={Boolean(followupDate && availableHours.length === 0)}
+            >
+              Confirmar alta médica
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -772,8 +997,13 @@ function RoomsPanel({ rooms, active }: { rooms: HospitalRoom[]; active: Hospital
 }
 
 function RoomForm({
-  open, onOpenChange, editing,
-}: { open: boolean; onOpenChange: (o: boolean) => void; editing: HospitalRoom | null }) {
+  open, onOpenChange, editing, onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  editing: HospitalRoom | null;
+  onCreated?: (room: HospitalRoom) => void;
+}) {
   const [type, setType] = useState<RoomType>(editing?.type ?? "Jaula");
   const [status, setStatus] = useState<RoomStatus>(editing?.status ?? "Disponible");
 
@@ -788,8 +1018,14 @@ function RoomForm({
       size: v.size ?? "",
       notes: v.notes ?? "",
     };
-    if (editing) { updateRoom(editing.id, data); toast.success("Actualizada"); }
-    else { addRoom(data); toast.success("Creada"); }
+    if (editing) {
+      updateRoom(editing.id, data);
+      toast.success("Jaula/habitación actualizada");
+    } else {
+      const created = addRoom(data);
+      toast.success("Jaula/habitación creada");
+      if (onCreated) onCreated(created);
+    }
     onOpenChange(false);
   };
 

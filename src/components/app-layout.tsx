@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCan, useCurrentRoleId } from "@/lib/rbac";
 import type { RbacModule } from "@/lib/rbac-store";
 import { useCurrentClinicId, setCurrentClinic, usePlanCapabilities, useActingClinicId, setActingClinic } from "@/lib/saas-store";
+import { AppFooter } from "@/components/AppFooter";
 import { useMyClinics } from "@/hooks/use-my-clinics";
 import { useVaccineReminders } from "@/hooks/use-vaccine-reminders";
 import { toast } from "sonner";
@@ -82,7 +83,13 @@ const roleLabel: Record<string, string> = {
   reception: "Recepción",
 };
 
-export function AppLayout({ children }: { children?: ReactNode }) {
+export function AppLayout({
+  children,
+  fullHeight = false,
+}: {
+  children?: ReactNode;
+  fullHeight?: boolean;
+}) {
   const { user, ready, logout, simulatedRole, setSimulatedRole } = useAuth();
   const profile = useUserProfile();
   const navigate = useNavigate();
@@ -129,7 +136,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   if (!ready) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
-        <div className="text-muted-foreground text-sm">Cargando VetCare...</div>
+        <div className="text-muted-foreground text-sm">Cargando Go2Vet...</div>
       </div>
     );
   }
@@ -158,11 +165,11 @@ export function AppLayout({ children }: { children?: ReactNode }) {
           ) : (
             <div className="h-28 w-28 rounded-3xl bg-white text-primary grid place-items-center font-bold text-5xl shadow-lg">SA</div>
           )}
-          <div className="text-white font-extrabold text-2xl text-center leading-tight w-full whitespace-normal break-words px-2">{activeClinic?.name ?? "VetCare Plataforma"}</div>
+          <div className="text-white font-extrabold text-2xl text-center leading-tight w-full whitespace-normal break-words px-2">{activeClinic?.name ?? "Go2Vet Plataforma"}</div>
           <div className="text-white/70 text-sm text-center">{activeClinic ? "Clínica veterinaria" : "Administración de clínicas"}</div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2.5 space-y-0.5 overflow-y-auto">
           {visibleNav.map((item) => {
             const active = pathname === item.to || pathname.startsWith(item.to + "/");
             const Icon = item.icon;
@@ -171,7 +178,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
                 key={item.to}
                 to={item.to}
                 onClick={() => setOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                className={`flex items-center gap-3 px-3 py-1.5 sm:py-2 rounded-lg text-sm transition-colors ${
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -192,28 +199,29 @@ export function AppLayout({ children }: { children?: ReactNode }) {
         <div className="p-3 border-t border-sidebar-border space-y-3">
           <PwaInstallButton />
 
-          <div className="pt-1">
-            <div className="flex items-center gap-3 px-2 py-1.5">
-              <Avatar className="h-9 w-9 ring-1 ring-white/20">
+          <div className="pt-0.5">
+            <Link
+              to="/perfil"
+              className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer group"
+              title="Ver mi perfil"
+            >
+              <Avatar className="h-8.5 w-8.5 ring-1 ring-white/20 shrink-0">
                 {profile.avatarUrl && (
                   <AvatarImage src={profile.avatarUrl} alt={profile.fullName || user?.name} className="object-cover" />
                 )}
-                <AvatarFallback className="bg-white/15 text-white text-sm font-semibold">
+                <AvatarFallback className="bg-white/15 text-white text-xs font-semibold">
                   {(profile.fullName || user?.name || "U").split(" ").map((n) => n[0]).slice(0, 2).join("")}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-sidebar-foreground truncate">
+                <div className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-white">
                   {profile.fullName || user?.name}
                 </div>
-                <div className="text-xs text-white/70 truncate">
+                <div className="text-[11px] text-white/70 truncate">
                   {profile.specialty || (user ? roleLabel[user.role] : "")}
                 </div>
               </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="w-full justify-start mt-1 text-white hover:bg-white/10 hover:text-white">
-              <LogOut className="h-4 w-4 mr-2" /> Cerrar sesión
-            </Button>
+            </Link>
           </div>
         </div>
       </aside>
@@ -298,25 +306,32 @@ export function AppLayout({ children }: { children?: ReactNode }) {
         )}
         <OfflineBanner />
         <SubscriptionBanner />
-        <main className="flex-1 p-4 md:p-8 overflow-auto">
-          {allowed ? (
-            <SubscriptionGate>{children ?? <Outlet />}</SubscriptionGate>
-          ) : (
-            <div className="min-h-[60vh] grid place-items-center">
-              <div className="max-w-md text-center space-y-3 p-8 rounded-xl border bg-card">
-                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 text-destructive grid place-items-center">
-                  <ShieldAlert className="h-6 w-6" />
+        <main
+          className={`flex-1 flex flex-col min-w-0 ${
+            fullHeight ? "p-0 overflow-hidden" : "p-4 md:p-6 overflow-y-auto"
+          }`}
+        >
+          <div className="flex-1">
+            {allowed ? (
+              <SubscriptionGate>{children ?? <Outlet />}</SubscriptionGate>
+            ) : (
+              <div className="min-h-[60vh] grid place-items-center">
+                <div className="max-w-md text-center space-y-3 p-8 rounded-xl border bg-card">
+                  <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 text-destructive grid place-items-center">
+                    <ShieldAlert className="h-6 w-6" />
+                  </div>
+                  <h2 className="text-lg font-semibold">Acceso restringido</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Tu rol no tiene permiso para ver este módulo. Contacta al administrador si necesitas acceso.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => navigate({ to: "/dashboard" })}>
+                    Volver al Dashboard
+                  </Button>
                 </div>
-                <h2 className="text-lg font-semibold">Acceso restringido</h2>
-                <p className="text-sm text-muted-foreground">
-                  Tu rol no tiene permiso para ver este módulo. Contacta al administrador si necesitas acceso.
-                </p>
-                <Button variant="outline" size="sm" onClick={() => navigate({ to: "/dashboard" })}>
-                  Volver al Dashboard
-                </Button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          {!fullHeight && <AppFooter className="mt-4 -mx-4 -mb-4 md:-mx-6 md:-mb-6" />}
         </main>
       </div>
       <VetCareAIFloating />

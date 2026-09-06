@@ -22,6 +22,7 @@ import { NotificationsMenu } from "@/components/notifications-menu";
 import { PortalUserNavDropdown } from "@/components/portal-user-nav-dropdown";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 import { PortalAIAssistant } from "@/components/portal-ai-assistant";
+import { AppFooter } from "@/components/AppFooter";
 
 const nav = [
   { to: "/portal/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -67,7 +68,7 @@ export function PortalLayout({ children }: { children?: ReactNode }) {
             <PawPrint className="h-5 w-5" />
           </div>
           <div>
-            <div className="font-bold text-sidebar-foreground leading-none">VetCare</div>
+            <div className="font-bold text-sidebar-foreground leading-none">Go2Vet</div>
             <div className="text-[11px] text-white/70 mt-1 font-medium">Portal Propietario</div>
           </div>
         </div>
@@ -120,23 +121,24 @@ export function PortalLayout({ children }: { children?: ReactNode }) {
           <PwaInstallButton />
 
           <div className="pt-1">
-            <div className="flex items-center gap-3 px-2 py-1.5">
-              <Avatar className="h-9 w-9 ring-1 ring-white/20">
+            <Link
+              to="/portal/perfil"
+              className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer group"
+              title="Ver mi perfil"
+            >
+              <Avatar className="h-8.5 w-8.5 ring-1 ring-white/20 shrink-0">
                 {owner.avatarUrl && (
                   <AvatarImage src={owner.avatarUrl} alt={owner.fullName} className="object-cover" />
                 )}
-                <AvatarFallback className="bg-white/15 text-white text-sm font-semibold">
+                <AvatarFallback className="bg-white/15 text-white text-xs font-semibold">
                   {owner.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("")}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-sidebar-foreground truncate">{owner.fullName}</div>
-                <div className="text-xs text-white/70 truncate">{owner.email}</div>
+                <div className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-white">{owner.fullName}</div>
+                <div className="text-[11px] text-white/70 truncate">{owner.email}</div>
               </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="w-full justify-start mt-1 text-white hover:bg-white/10 hover:text-white">
-              <LogOut className="h-4 w-4 mr-2" /> Cerrar sesión
-            </Button>
+            </Link>
           </div>
         </div>
       </aside>
@@ -160,7 +162,10 @@ export function PortalLayout({ children }: { children?: ReactNode }) {
           </div>
         </header>
         <OfflineBanner />
-        <main className="flex-1 p-4 md:p-8 overflow-auto">{children ?? <Outlet />}</main>
+        <main className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto">
+          <div className="flex-1">{children ?? <Outlet />}</div>
+          <AppFooter className="mt-6 -mx-4 -mb-4 md:-mx-8 md:-mb-8" />
+        </main>
       </div>
       <PortalAIAssistant />
       </div>

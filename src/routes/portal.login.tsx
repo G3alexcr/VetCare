@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { Go2VetLogo } from "@/components/Go2VetLogo";
+import { LegalModal, type LegalPolicyKey } from "@/components/legal-modal";
 
 export const Route = createFileRoute("/portal/login")({
-  head: () => ({ meta: [{ title: "Portal Propietario — VetCare" }] }),
+  head: () => ({ meta: [{ title: "Portal Propietario — Go2Vet" }] }),
   component: PortalLoginPage,
 });
 
@@ -25,6 +27,24 @@ function PortalLoginPage() {
     }
   }, [ready, owner, navigate]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const emailParam = params.get("email");
+      if (emailParam) {
+        const clean = emailParam.trim().toLowerCase();
+        setEmail(clean);
+        setMode("register");
+        const allClients = getAllClientes();
+        const found = allClients.find((c) => c.email.toLowerCase() === clean);
+        if (found) {
+          setName(found.fullName || found.name);
+        }
+        toast.info("Crea tu contraseña para acceder al expediente y carnet de tu mascota");
+      }
+    }
+  }, []);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -33,6 +53,13 @@ function PortalLoginPage() {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [mode, setMode] = useState<"login" | "register" | "recover">("login");
   const [loading, setLoading] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState<LegalPolicyKey>("datos-personales");
+
+  const openLegal = (policy: LegalPolicyKey) => {
+    setSelectedPolicy(policy);
+    setLegalModalOpen(true);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,12 +121,7 @@ function PortalLoginPage() {
       <DataHydrator />
       <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <div className="hidden lg:flex relative bg-gradient-to-br from-emerald-500 to-teal-600 p-12 text-white flex-col justify-between overflow-hidden">
-        <div className="flex items-center gap-2">
-          <div className="h-10 w-10 rounded-xl bg-white/15 grid place-items-center">
-            <Heart className="h-5 w-5" />
-          </div>
-          <span className="font-semibold text-lg">VetCare · Portal</span>
-        </div>
+        <Go2VetLogo size="md" variant="light" subtitle="Portal Propietarios" />
         <div className="relative z-10">
           <h1 className="text-4xl font-bold leading-tight">
             Todo el cuidado de tus mascotas en un solo lugar.
@@ -109,7 +131,7 @@ function PortalLoginPage() {
             desde tu portal personal.
           </p>
         </div>
-        <div className="text-xs text-white/70">© 2026 VetCare</div>
+        <div className="text-xs text-white/70">© 2026 Go2Vet</div>
         <div className="absolute -bottom-20 -right-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
       </div>
 
@@ -276,8 +298,40 @@ function PortalLoginPage() {
               Ir a la App Clínica
             </Link>
           </div>
+
+          <div className="mt-6 pt-4 border-t border-border/60 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => openLegal("datos-personales")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Habeas Data
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal("aplicativos-web")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Aplicativos Web
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal("condiciones-uso")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Condiciones de Uso
+            </button>
+          </div>
         </Card>
       </div>
+
+      <LegalModal
+        open={legalModalOpen}
+        onOpenChange={setLegalModalOpen}
+        initialPolicy={selectedPolicy}
+      />
       </div>
     </>
   );

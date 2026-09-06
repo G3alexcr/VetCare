@@ -36,6 +36,7 @@ import {
   type PaymentMethod,
 } from "@/lib/billing-store";
 import { useAuth } from "@/lib/auth";
+import { toLocalDateStr } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/caja")({
   head: () => ({ meta: [{ title: "Caja y Facturación — VetCare" }] }),
@@ -50,7 +51,7 @@ function CajaPage() {
   const invoices = useInvoices();
   const openSession = sessions.find((s) => !s.closedAt);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = toLocalDateStr(new Date());
   const todayInvoices = invoices.filter((i) => i.date === today && i.status === "Emitida");
   const salesToday = todayInvoices.reduce((a, i) => a + i.total, 0);
   const currentBalance = openSession ? calcSessionBalance(openSession.id) : 0;

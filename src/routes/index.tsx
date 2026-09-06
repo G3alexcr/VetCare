@@ -6,7 +6,7 @@ import { WebsiteRenderer } from "@/components/website-templates/WebsiteRenderer"
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "VetCare — Plataforma para clínicas veterinarias" },
+      { title: "Go2Vet — Plataforma para clínicas veterinarias" },
       { name: "description", content: "Sitio web oficial y servicios para el cuidado de mascotas." },
     ],
   }),

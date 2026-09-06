@@ -58,11 +58,37 @@ type BillingState = {
   invoiceCounter: number;
 };
 
+const STORAGE_KEY = "go2vet_billing_v2";
+
+function loadLocalStorage(): Partial<BillingState> {
+  if (typeof window === "undefined") return {};
+  try {
+    if (localStorage.getItem("go2vet_billing_v1")) {
+      localStorage.removeItem("go2vet_billing_v1");
+    }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    console.error("Error cargando billing-store de localStorage:", err);
+    return {};
+  }
+}
+
+function persistLocalStorage(s: BillingState) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch (e) {
+    console.error("Error guardando billing-store en localStorage:", e);
+  }
+}
+
+const initialSaved = loadLocalStorage();
 let state: BillingState = {
-  sessions: [],
-  movements: [],
-  invoices: [],
-  invoiceCounter: 1,
+  sessions: initialSaved.sessions ?? [],
+  movements: initialSaved.movements ?? [],
+  invoices: initialSaved.invoices ?? [],
+  invoiceCounter: initialSaved.invoiceCounter ?? 1,
 };
 
 const listeners = new Set<() => void>();
@@ -72,6 +98,7 @@ const subscribe = (l: () => void) => {
 };
 const setState = (updater: (s: BillingState) => BillingState) => {
   state = updater(state);
+  persistLocalStorage(state);
   listeners.forEach((l) => l());
 };
 
@@ -159,7 +186,21 @@ export async function hydrateBilling(_clinicId: string): Promise<void> {
 
   // Renumerar a partir del mayor sufijo numérico ya persistido.
   const maxNum = invoices.reduce((a, i) => Math.max(a, parseInt(i.number.replace(/\D/g, ""), 10) || 0), 0);
-  setState((st) => ({ ...st, sessions, movements, invoices, invoiceCounter: maxNum + 1 }));
+  setState((st) => {
+    const dbSessionIds = new Set(sessions.map((s) => s.id));
+    const mergedSessions = [...sessions, ...st.sessions.filter((s) => !dbSessionIds.has(s.id))];
+    const dbMovIds = new Set(movements.map((m) => m.id));
+    const mergedMovements = [...movements, ...st.movements.filter((m) => !dbMovIds.has(m.id))];
+    const dbInvIds = new Set(invoices.map((i) => i.id));
+    const mergedInvoices = [...invoices, ...st.invoices.filter((i) => !dbInvIds.has(i.id))];
+
+    return {
+      sessions: mergedSessions,
+      movements: mergedMovements,
+      invoices: mergedInvoices,
+      invoiceCounter: Math.max(maxNum + 1, st.invoiceCounter),
+    };
+  });
 }
 registerHydrator(hydrateBilling);
 

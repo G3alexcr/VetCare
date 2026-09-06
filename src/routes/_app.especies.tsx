@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EspecieFormDialog } from "@/components/especie-form-dialog";
-import { Can } from "@/lib/rbac";
 import {
   ESPECIE_ESTADOS,
   addEspecie,
@@ -20,7 +19,7 @@ import {
   type EspecieDraft,
   type EspecieEstado,
 } from "@/lib/especies-store";
-import { Bone, Pencil, Plus, Power, Search, Trash2, X } from "lucide-react";
+import { Bone, Pencil, Plus, Power, Search, Tags, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/especies")({ component: EspeciesPage });
@@ -69,8 +68,10 @@ function EspeciesPage() {
   };
 
   const handleDelete = (s: Especie) => {
-    deleteEspecie(s.id);
-    toast.success(`${s.nombre} eliminada`);
+    if (window.confirm(`¿Estás seguro de eliminar la especie "${s.nombre}" y sus razas asociadas?`)) {
+      deleteEspecie(s.id);
+      toast.success(`${s.nombre} eliminada`);
+    }
   };
 
   const handleToggle = (s: Especie) => {
@@ -90,13 +91,15 @@ function EspeciesPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Bone className="h-6 w-6 text-primary" /> Gestión de Especies
+              <Bone className="h-6 w-6 text-primary" /> Gestión de Especies y Razas
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">Administra las especies atendidas por la veterinaria.</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              Administra las especies y el catálogo de razas disponibles para tus pacientes.
+            </p>
           </div>
-          <Can module="especies" action="create">
-            <Button onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Nueva especie</Button>
-          </Can>
+          <Button onClick={openNew}>
+            <Plus className="h-4 w-4 mr-1" /> Nueva especie
+          </Button>
         </div>
 
         {/* Filters */}
@@ -144,34 +147,60 @@ function EspeciesPage() {
                   <TableCell className="font-medium">{s.nombre}</TableCell>
                   <TableCell className="text-muted-foreground">{s.descripcion || "—"}</TableCell>
                   <TableCell>
-                    {s.razas.length === 0 ? (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    ) : (
-                      <Badge variant="secondary" title={s.razas.join(", ")}>
-                        {s.razas.length} raza{s.razas.length === 1 ? "" : "s"}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 text-xs gap-1.5 font-normal hover:bg-secondary/80"
+                        onClick={() => openEdit(s)}
+                        title="Haz clic para ver o editar las razas de esta especie"
+                      >
+                        <Tags className="h-3.5 w-3.5 text-primary" />
+                        <span className="font-semibold">{s.razas.length}</span> {s.razas.length === 1 ? "raza" : "razas"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                        onClick={() => openEdit(s)}
+                        title="Agregar o editar razas"
+                      >
+                        <Plus className="h-3 w-3 mr-0.5" /> Razas
+                      </Button>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge className={estadoColor(s.estado)}>{s.estado}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Can module="especies" action="edit">
-                        <Button size="sm" variant="outline" className="text-amber-600 border-amber-300 hover:bg-amber-50" onClick={() => openEdit(s)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </Can>
-                      <Can module="especies" action="edit">
-                        <Button size="sm" variant="outline" onClick={() => handleToggle(s)} title={s.estado === "Activo" ? "Desactivar" : "Activar"}>
-                          <Power className="h-4 w-4" />
-                        </Button>
-                      </Can>
-                      <Can module="especies" action="delete">
-                        <Button size="sm" variant="outline" className="text-destructive border-red-300 hover:bg-red-50" onClick={() => handleDelete(s)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </Can>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-amber-600 border-amber-300 hover:bg-amber-50 gap-1"
+                        onClick={() => openEdit(s)}
+                        title="Editar especie y razas"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span className="hidden sm:inline text-xs">Editar</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleToggle(s)}
+                        title={s.estado === "Activo" ? "Desactivar especie" : "Activar especie"}
+                      >
+                        <Power className={`h-4 w-4 ${s.estado === "Activo" ? "text-emerald-600" : "text-slate-400"}`} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-red-300 hover:bg-red-50"
+                        onClick={() => handleDelete(s)}
+                        title="Eliminar especie"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

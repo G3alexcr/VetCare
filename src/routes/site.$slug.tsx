@@ -4,7 +4,7 @@ import { fetchPublicSite, slugFromHost, type WebsiteSettings, type WebsiteServic
 import { WebsiteRenderer } from "@/components/website-templates/WebsiteRenderer";
 
 export const Route = createFileRoute("/site/$slug")({
-  head: () => ({ meta: [{ title: "Sitio — VetCare" }] }),
+  head: () => ({ meta: [{ title: "Sitio — Go2Vet" }] }),
   component: PublicSitePage,
 });
 

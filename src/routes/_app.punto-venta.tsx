@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppLayout } from "@/components/app-layout";
 import { PosNav } from "@/components/pos-nav";
@@ -12,6 +12,11 @@ import { Label } from "@/components/ui/label";
 import { formatMoney, useCurrency } from "@/lib/config-store";
 import { usePlanCapabilities } from "@/lib/saas-store";
 import { PlanGate } from "@/components/plan-gate";
+import { useClientes } from "@/lib/clientes-store";
+import { usePets } from "@/lib/pets-store";
+import { finance, type FinancePaymentMethod } from "@/lib/finance-store";
+import { addMovement, getOpenSession as getBillingOpenSession } from "@/lib/billing-store";
+import { toLocalDateStr } from "@/lib/utils";
 import {
   PAYMENT_METHODS,
   TAX_RATE,
@@ -24,13 +29,41 @@ import {
   usePosProducts,
   type PaymentMethod,
 } from "@/lib/pos-store";
-import { ShoppingCart, Plus, Minus, Trash2, Banknote, Search, ScanBarcode, Printer, X, TriangleAlert, Package } from "lucide-react";
+import {
+  ShoppingCart,
+  Plus,
+  Minus,
+  Trash2,
+  Banknote,
+  Search,
+  ScanBarcode,
+  Printer,
+  X,
+  TriangleAlert,
+  Package,
+  CheckCircle2,
+  User,
+  FileText,
+  ArrowRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/punto-venta")({ component: PuntoVentaPage });
 
 type CartLine = { productId: string; name: string; unitPrice: number; stock: number; quantity: number; discount: number };
-type Receipt = { number: string; items: { name: string; quantity: number; unitPrice: number; lineTotal: number }[]; subtotal: number; discount: number; tax: number; total: number; received: number; change: number; method: PaymentMethod } | null;
+type Receipt = {
+  number: string;
+  invoiceNumber?: string;
+  clientName: string;
+  items: { name: string; quantity: number; unitPrice: number; lineTotal: number }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  received: number;
+  change: number;
+  method: PaymentMethod;
+} | null;
 
 function PuntoVentaPage() {
   const caps = usePlanCapabilities();
@@ -38,6 +71,8 @@ function PuntoVentaPage() {
   const categories = usePosCategories();
   const currency = useCurrency();
   const kpis = usePosKpis();
+  const clientes = useClientes();
+  const pets = usePets();
   if (!caps.posEnabled) return <AppLayout><PlanGate planKey="pos" /></AppLayout>;
 
   const [query, setQuery] = useState("");
@@ -48,7 +83,9 @@ function PuntoVentaPage() {
   const [receipt, setReceipt] = useState<Receipt>(null);
   const [method, setMethod] = useState<PaymentMethod>("Efectivo");
   const [received, setReceived] = useState<number | undefined>(undefined);
-  const [clientName, setClientName] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string>("mostrador");
+  const [selectedPetName, setSelectedPetName] = useState<string>("");
+  const [clientName, setClientName] = useState("Cliente de mostrador");
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -148,58 +185,134 @@ function PuntoVentaPage() {
           </div>
 
           {/* Carrito */}
-          <Card className="p-4 flex flex-col h-fit lg:sticky lg:top-20">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-semibold flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-primary" /> Carrito</div>
-              <Badge variant="secondary">{cart.reduce((a, l) => a + l.quantity, 0)}</Badge>
-            </div>
-            {cart.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-8">Agrega productos del catálogo.</div>
-            ) : (
-              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                {cart.map((l) => (
-                  <div key={l.productId} className="flex items-center gap-2 text-sm">
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate font-medium">{l.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatMoney(l.unitPrice, currency)} c/u</div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setQty(l.productId, l.quantity - 1)}><Minus className="h-3 w-3" /></Button>
-                      <input value={l.quantity} onChange={(e) => setQty(l.productId, Number(e.target.value) || 1)} className="w-10 text-center text-sm border rounded h-7" />
-                      <Button size="icon" variant="ghost" className="h-6 w-6" disabled={l.quantity + 1 > l.stock} onClick={() => setQty(l.productId, l.quantity + 1)}><Plus className="h-3 w-3" /></Button>
-                    </div>
-                    <div className="w-16 text-right font-medium whitespace-nowrap">{formatMoney(l.unitPrice * l.quantity - l.discount, currency)}</div>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeLine(l.productId)}><Trash2 className="h-3 w-3" /></Button>
-                  </div>
-                ))}
+          <div>
+            <Card className="p-4 space-y-4 sticky top-20">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2 font-semibold"><ShoppingCart className="h-4 w-4" /> Carrito</div>
+                <Badge variant="outline">{cart.reduce((a, l) => a + l.quantity, 0)}</Badge>
               </div>
-            )}
 
-            <div className="mt-3 pt-3 border-t space-y-2">
-              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span>{formatMoney(subtotal, currency)}</span></div>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Descuento</span>
-                <Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value) || 0)} className="h-7 text-right ml-auto w-28" />
-              </div>
-              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">IVA</span><span>{formatMoney(tax, currency)}</span></div>
-              <div className="flex items-center justify-between text-lg font-bold"><span>Total</span><span>{formatMoney(total, currency)}</span></div>
-              <Button className="w-full mt-2" disabled={cart.length === 0} onClick={openCheckout}>
-                <Banknote className="h-4 w-4 mr-1" /> Cobrar
-              </Button>
-            </div>
-          </Card>
+              {cart.length === 0 ? (
+                <div className="text-center text-muted-foreground text-xs py-10">El carrito está vacío. Haz clic en agregar en los productos del catálogo.</div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {cart.map((l) => (
+                      <div key={l.productId} className="flex items-center gap-2 text-xs">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{l.name}</div>
+                          <div className="text-muted-foreground">{formatMoney(l.unitPrice, currency)} c/u</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setQty(l.productId, l.quantity - 1)}><Minus className="h-3 w-3" /></Button>
+                          <span className="w-6 text-center font-medium">{l.quantity}</span>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setQty(l.productId, l.quantity + 1)}><Plus className="h-3 w-3" /></Button>
+                        </div>
+                        <div className="w-16 text-right font-medium">{formatMoney(l.unitPrice * l.quantity, currency)}</div>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeLine(l.productId)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border-t pt-3 space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatMoney(subtotal, currency)}</span></div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Descuento</span>
+                      <Input type="number" min={0} value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value) || 0)} className="w-20 h-7 text-right text-xs" />
+                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">IVA (13%)</span><span>{formatMoney(tax, currency)}</span></div>
+                    <div className="flex justify-between font-bold text-base border-t pt-2"><span>Total</span><span>{formatMoney(total, currency)}</span></div>
+                  </div>
+
+                  <Button className="w-full" size="lg" onClick={openCheckout}>
+                    <Banknote className="h-4 w-4 mr-2" /> Cobrar
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
 
       {/* Checkout */}
       <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Cobrar</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="text-center"><span className="text-xs text-muted-foreground">Total a pagar</span><div className="text-3xl font-bold">{formatMoney(total, currency)}</div></div>
-            <div className="space-y-1.5"><Label>Cliente (opcional)</Label><Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Cliente de mostrador" /></div>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" /> Cobrar venta
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="text-center p-3 rounded-lg bg-muted/50 border border-border">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total a cobrar</span>
+              <div className="text-3xl font-extrabold text-primary mt-0.5">{formatMoney(total, currency)}</div>
+            </div>
+
             <div className="space-y-1.5">
-              <Label>Método de pago</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="clientSelect" className="text-xs font-semibold">Cliente</Label>
+                <span className="text-[11px] text-muted-foreground">Selecciona de la lista o escribe</span>
+              </div>
+              <Select
+                value={selectedClientId}
+                onValueChange={(val) => {
+                  setSelectedClientId(val);
+                  if (val === "mostrador") {
+                    setClientName("Cliente de mostrador");
+                    setSelectedPetName("");
+                  } else if (val === "otro") {
+                    setClientName("");
+                    setSelectedPetName("");
+                  } else {
+                    const c = clientes.find((cli) => cli.id === val);
+                    if (c) {
+                      setClientName(c.nombre);
+                      const cliPets = pets.filter((p) => p.clientId === c.id);
+                      if (cliPets.length > 0) {
+                        setSelectedPetName(cliPets[0].name);
+                      } else {
+                        setSelectedPetName("");
+                      }
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger id="clientSelect" className="w-full">
+                  <SelectValue placeholder="Selecciona un cliente o mostrador" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="mostrador">
+                    👤 Cliente de mostrador (Venta rápida)
+                  </SelectItem>
+                  <SelectItem value="otro">
+                    ✍️ Digitar otro cliente / Nuevo...
+                  </SelectItem>
+                  {clientes.map((cli) => (
+                    <SelectItem key={cli.id} value={cli.id}>
+                      {cli.nombre} {cli.telefono ? `· 📞 ${cli.telefono}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="relative mt-2">
+                <Input
+                  value={clientName}
+                  onChange={(e) => {
+                    setClientName(e.target.value);
+                    if (selectedClientId !== "otro" && selectedClientId !== "mostrador") {
+                      setSelectedClientId("otro");
+                    }
+                  }}
+                  placeholder="Nombre o razón social del cliente"
+                  className="pl-8"
+                />
+                <User className="h-4 w-4 text-muted-foreground absolute left-2.5 top-3" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Método de pago</Label>
               <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
@@ -207,14 +320,26 @@ function PuntoVentaPage() {
             </div>
             {method === "Efectivo" && (
               <div className="space-y-1.5">
-                <Label>Recibido</Label>
-                <Input type="number" min={0} value={received ?? ""} onChange={(e) => setReceived(e.target.value === "" ? undefined : Number(e.target.value))} />
-                {received != null && received >= total && <div className="text-sm text-emerald-600">Cambio: {formatMoney(received - total, currency)}</div>}
+                <Label className="text-xs font-semibold">Monto recibido</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={received ?? ""}
+                  onChange={(e) => setReceived(e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Ingresa el monto recibido"
+                />
+                {received != null && received >= total && (
+                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded border border-emerald-200 dark:border-emerald-900">
+                    Cambio a devolver: {formatMoney(received - total, currency)}
+                  </div>
+                )}
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCheckoutOpen(false)}><X className="h-4 w-4 mr-1" /> Cancelar</Button>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => setCheckoutOpen(false)}>
+              <X className="h-4 w-4 mr-1" /> Cancelar
+            </Button>
             <Button onClick={doCheckout}>Confirmar venta</Button>
           </DialogFooter>
         </DialogContent>
@@ -222,31 +347,81 @@ function PuntoVentaPage() {
 
       {/* Recibo */}
       <Dialog open={receipt != null} onOpenChange={(o) => { if (!o) setReceipt(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Printer className="h-4 w-4" /> {receipt?.number}</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-4 w-4 text-primary" /> Comprobante de venta
+            </DialogTitle>
+          </DialogHeader>
           {receipt && (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="border-b pb-2">
-                <div className="font-semibold">VetCare</div>
-                <div className="text-xs text-muted-foreground">Punto de venta</div>
+                <div className="font-bold text-base text-foreground">VetCare Clínica Veterinaria</div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                  <span>Ticket POS: <b className="text-foreground">{receipt.number}</b></span>
+                  {receipt.invoiceNumber && (
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold">
+                      Factura {receipt.invoiceNumber}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Cliente: <span className="font-semibold text-foreground">{receipt.clientName}</span>
+                </div>
               </div>
-              <div className="space-y-1">
+
+              <div className="space-y-1 max-h-40 overflow-y-auto">
                 {receipt.items.map((i, idx) => (
-                  <div key={idx} className="flex justify-between gap-2">
-                    <span className="flex-1">{i.quantity}× {i.name}</span>
-                    <span className="whitespace-nowrap">{formatMoney(i.lineTotal, currency)}</span>
+                  <div key={idx} className="flex justify-between gap-2 text-xs py-0.5">
+                    <span className="flex-1 truncate">{i.quantity}× {i.name}</span>
+                    <span className="whitespace-nowrap font-medium">{formatMoney(i.lineTotal, currency)}</span>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between text-muted-foreground"><span>Descuento</span><span>{formatMoney(receipt.discount, currency)}</span></div>
-              <div className="flex justify-between text-muted-foreground"><span>IVA</span><span>{formatMoney(receipt.tax, currency)}</span></div>
-              <div className="flex justify-between font-bold text-base border-t pt-2"><span>TOTAL</span><span>{formatMoney(receipt.total, currency)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Método</span><span>{receipt.method}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Recibido</span><span>{formatMoney(receipt.received, currency)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Cambio</span><span>{formatMoney(receipt.change, currency)}</span></div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button size="sm" variant="outline" onClick={() => setReceipt(null)}>Cerrar</Button>
-                <Button size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Imprimir</Button>
+
+              <div className="border-t pt-2 space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(receipt.subtotal, currency)}</span></div>
+                {receipt.discount > 0 && <div className="flex justify-between text-emerald-600"><span>Descuento</span><span>-{formatMoney(receipt.discount, currency)}</span></div>}
+                <div className="flex justify-between"><span>IVA (13%)</span><span>{formatMoney(receipt.tax, currency)}</span></div>
+                <div className="flex justify-between font-bold text-sm text-foreground border-t pt-1"><span>TOTAL PAGADO</span><span>{formatMoney(receipt.total, currency)}</span></div>
+                <div className="flex justify-between"><span>Método de pago</span><span>{receipt.method}</span></div>
+                {receipt.method === "Efectivo" && (
+                  <>
+                    <div className="flex justify-between"><span>Recibido</span><span>{formatMoney(receipt.received, currency)}</span></div>
+                    <div className="flex justify-between font-medium text-foreground"><span>Cambio entregado</span><span>{formatMoney(receipt.change, currency)}</span></div>
+                  </>
+                )}
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+                <div>
+                  <div className="font-semibold">Venta registrada en el sistema</div>
+                  <div className="text-[11px] opacity-90">
+                    Se registró la factura comercial en Facturación y Finanzas y en la Caja de la clínica.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/facturacion">
+                      <FileText className="h-3.5 w-3.5 mr-1" /> Facturación
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/pos-ventas">
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Ventas POS
+                    </Link>
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setReceipt(null)}>Cerrar</Button>
+                  <Button size="sm" onClick={() => window.print()}>
+                    <Printer className="h-3.5 w-3.5 mr-1" /> Imprimir
+                  </Button>
+                </div>
               </div>
             </div>
           )}

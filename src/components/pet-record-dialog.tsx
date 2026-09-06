@@ -43,6 +43,7 @@ import {
   type LinkedConsultation,
 } from "@/lib/store";
 import { toast } from "sonner";
+import { toLocalDateStr } from "@/lib/utils";
 
 function calcAge(birthDate: string): string {
   if (!birthDate) return "—";
@@ -322,15 +323,15 @@ export function PetRecordDialog({
             defaults={{ petId: pet.id, clientId: pet.clientId }}
             onCancel={() => setNewOpen(false)}
             onSubmit={(data) => {
-              // Try to attach to a current "En atención" appointment for this pet today
-              const today = new Date().toISOString().split("T")[0];
+              // Try to attach to a current appointment for this pet today
+              const today = data.date || toLocalDateStr(new Date());
               const active = appointments.find(
-                (a) => a.petId === pet.id && a.status === "En atención" && a.date === today
+                (a) => a.petId === pet.id && a.date === today && a.status !== "Cancelada" && a.status !== "Finalizada"
               );
               if (active) {
                 addConsultationFromAppointment(data, active.id);
               } else {
-                addConsultation({ ...data, id: `co${Date.now()}` });
+                addConsultation({ ...data, id: crypto.randomUUID() });
               }
               setNewOpen(false);
               toast.success("Consulta registrada");

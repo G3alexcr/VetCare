@@ -1058,7 +1058,7 @@ function VetProformaGenerator({ clinics, plans }: { clinics: Clinic[]; plans: Su
           <Button
             onClick={() => {
               navigator.clipboard.writeText(
-                `Propuesta VetCare para ${clinicName} - Plan ${plans.find((p) => p.id === selectedPlanId)?.name || 'Pro'}: $${monthlyPrice}/mes`
+                `Propuesta Go2Vet para ${clinicName} - Plan ${plans.find((p) => p.id === selectedPlanId)?.name || 'Pro'}: $${monthlyPrice}/mes`
               );
               toast.success("Resumen copiado al portapapeles");
             }}
@@ -1170,9 +1170,9 @@ function VetProformaGenerator({ clinics, plans }: { clinics: Clinic[]; plans: Su
                   🐾
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight text-slate-900">VetCare Cloud</h2>
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900">Go2Vet Cloud</h2>
                   <p className="text-xs text-slate-500 font-medium">Plataforma Integral de Gestión y Portales Veterinarios</p>
-                  <p className="text-[11px] text-slate-400 font-mono">contacto@vetcare.app · +506 8888-8888</p>
+                  <p className="text-[11px] text-slate-400 font-mono">contacto@go2vet.app · +506 8888-8888</p>
                 </div>
               </div>
               <div className="text-right">
@@ -1208,7 +1208,7 @@ function VetProformaGenerator({ clinics, plans }: { clinics: Clinic[]; plans: Su
               <tbody className="divide-y divide-slate-100">
                 <tr>
                   <td className="p-3">
-                    <p className="font-bold text-slate-900">Licencia SaaS VetCare — {plans.find((p) => p.id === selectedPlanId)?.name || 'Plan Pro'}</p>
+                    <p className="font-bold text-slate-900">Licencia SaaS Go2Vet — {plans.find((p) => p.id === selectedPlanId)?.name || 'Plan Pro'}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Expediente clínico digital, agenda médica, hospitalización, vacunas, inventario y punto de venta.
                     </p>
@@ -1244,7 +1244,7 @@ function VetProformaGenerator({ clinics, plans }: { clinics: Clinic[]; plans: Su
               <div>
                 <div className="border-b border-slate-300 w-40 mx-auto mb-2" />
                 <p className="font-bold text-slate-900">{repName}</p>
-                <p className="text-[11px] text-slate-500">Asesor de Cuentas VetCare Cloud</p>
+                <p className="text-[11px] text-slate-500">Asesor de Cuentas Go2Vet Cloud</p>
               </div>
               <div>
                 <div className="border-b border-slate-300 w-40 mx-auto mb-2" />

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Plus, Eye, Pencil, Trash2, Hospital, LogOut } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Plus, Eye, Pencil, Trash2, Hospital, LogOut, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useVeterinarios } from "@/lib/veterinarios-store";
+import { usePets } from "@/lib/pets-store";
 import {
   useHospitalizations,
   useHospitalizationProgress,
@@ -38,9 +39,13 @@ import {
   dischargeHospitalization,
   addHospitalizationProgress,
   deleteHospitalizationProgress,
+  useAppointments,
+  addAppointment,
+  STANDARD_HOURS,
   type Hospitalization,
   type HospitalizationStatus,
 } from "@/lib/store";
+import { toLocalDateStr } from "@/lib/utils";
 import { toast } from "sonner";
 
 const STATUSES: HospitalizationStatus[] = [
@@ -281,7 +286,16 @@ function HospDetail({ item, onClose }: { item: Hospitalization | null; onClose: 
               {item.dischargeDate && (
                 <>
                   <Row label="Fecha de alta" value={item.dischargeDate} />
-                  <Row label="Próximo control" value={item.followupDate || "—"} />
+                  <Row
+                    label="Próximo control"
+                    value={
+                      item.followupDate
+                        ? item.followupTime
+                          ? `${item.followupDate} a las ${item.followupTime} hrs`
+                          : item.followupDate
+                        : "—"
+                    }
+                  />
                   <Block label="Resumen clínico" value={item.dischargeSummary} />
                   <Block label="Indicaciones al propietario" value={item.ownerInstructions} />
                   <Block label="Medicamentos enviados" value={item.dischargeMedications} />
@@ -409,53 +423,223 @@ function ProgressSection({ hospitalizationId }: { hospitalizationId: string }) {
 }
 
 function DischargeDialog({ item, onClose }: { item: Hospitalization | null; onClose: () => void }) {
-  const today = new Date().toISOString().split("T")[0];
+  const appointments = useAppointments();
+  const pets = usePets();
+  const vets = useVeterinarios();
+
+  const today = toLocalDateStr(new Date());
+  const [dischargeDate, setDischargeDate] = useState(today);
+  const [followupDate, setFollowupDate] = useState("");
+  const [followupTime, setFollowupTime] = useState("");
+  const [dischargeSummary, setDischargeSummary] = useState("");
+  const [ownerInstructions, setOwnerInstructions] = useState("");
+  const [dischargeMedications, setDischargeMedications] = useState("");
+
+  useEffect(() => {
+    if (item) {
+      setDischargeDate(toLocalDateStr(new Date()));
+      setFollowupDate("");
+      setFollowupTime("");
+      setDischargeSummary("");
+      setOwnerInstructions("");
+      setDischargeMedications("");
+    }
+  }, [item]);
+
+  const bookedHours = useMemo(() => {
+    if (!followupDate) return new Set<string>();
+    return new Set(
+      appointments
+        .filter((a) => a.date === followupDate && a.status !== "Cancelada")
+        .map((a) => a.time)
+    );
+  }, [appointments, followupDate]);
+
+  const availableHours = useMemo(() => {
+    if (!followupDate) return [];
+    const now = new Date();
+    const todayStr = toLocalDateStr(now);
+    const currentHourStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return STANDARD_HOURS.filter((h) => {
+      if (bookedHours.has(h)) return false;
+      if (followupDate === todayStr && h <= currentHourStr) return false;
+      return true;
+    });
+  }, [followupDate, bookedHours]);
+
+  useEffect(() => {
+    if (followupDate) {
+      if (availableHours.length > 0) {
+        if (!followupTime || !availableHours.includes(followupTime)) {
+          setFollowupTime(availableHours[0]);
+        }
+      } else {
+        setFollowupTime("");
+      }
+    } else {
+      setFollowupTime("");
+    }
+  }, [followupDate, availableHours, followupTime]);
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!item) return;
-    const fd = new FormData(e.currentTarget);
-    const v = Object.fromEntries(fd.entries()) as Record<string, string>;
+
+    if (followupDate && !followupTime) {
+      toast.error("Por favor selecciona una hora disponible para el control o retira la fecha.");
+      return;
+    }
+
+    const pet = pets.find((p) => p.id === item.petId);
+    const assignedVet =
+      vets.find((v) => v.nombre === item.veterinarian || v.id === item.veterinarian) || vets[0];
+
     dischargeHospitalization(item.id, {
-      dischargeDate: v.dischargeDate,
-      dischargeSummary: v.dischargeSummary ?? "",
-      ownerInstructions: v.ownerInstructions ?? "",
-      dischargeMedications: v.dischargeMedications ?? "",
-      followupDate: v.followupDate ?? "",
+      dischargeDate,
+      dischargeSummary,
+      ownerInstructions,
+      dischargeMedications,
+      followupDate,
+      followupTime: followupDate ? followupTime : undefined,
     });
-    toast.success("Alta médica registrada");
+
+    if (followupDate && followupTime) {
+      addAppointment({
+        id: crypto.randomUUID(),
+        date: followupDate,
+        time: followupTime,
+        clientId: pet?.clientId || "",
+        petId: item.petId,
+        vetId: assignedVet?.id || "",
+        reason: `Control post-hospitalización · ${pet?.name || "Paciente"}`,
+        status: "Confirmada",
+      });
+      toast.success(
+        `Alta médica registrada. Cita de control agendada para el ${followupDate} a las ${followupTime} hrs.`
+      );
+    } else {
+      toast.success("Alta médica registrada");
+    }
+
     onClose();
   };
+
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Dar de alta</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <LogOut className="h-5 w-5 text-primary" /> Dar de alta
+          </DialogTitle>
         </DialogHeader>
         {item && (
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-2">
               <Label htmlFor="dischargeDate">Fecha alta</Label>
-              <Input id="dischargeDate" name="dischargeDate" type="date" required defaultValue={today} />
+              <Input
+                id="dischargeDate"
+                name="dischargeDate"
+                type="date"
+                required
+                value={dischargeDate}
+                onChange={(e) => setDischargeDate(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="followupDate">Próximo control</Label>
-              <Input id="followupDate" name="followupDate" type="date" />
+              <Label htmlFor="followupDate">Próximo control (Fecha)</Label>
+              <Input
+                id="followupDate"
+                name="followupDate"
+                type="date"
+                min={dischargeDate || today}
+                value={followupDate}
+                onChange={(e) => setFollowupDate(e.target.value)}
+              />
             </div>
+
+            {followupDate && (
+              <div className="space-y-2 col-span-2 p-3 bg-muted/40 rounded-lg border border-border">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="followupTime" className="text-xs font-semibold flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    Hora del próximo control (Horario de clínica)
+                  </Label>
+                  {availableHours.length > 0 && (
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      {availableHours.length} turno(s) libre(s) sin colisión
+                    </span>
+                  )}
+                </div>
+
+                {availableHours.length > 0 ? (
+                  <>
+                    <Select value={followupTime} onValueChange={setFollowupTime}>
+                      <SelectTrigger id="followupTime" className="bg-background">
+                        <SelectValue placeholder="Selecciona una hora disponible" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableHours.map((hour) => (
+                          <SelectItem key={hour} value={hour}>
+                            {hour} hrs — Turno disponible
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Este turno se apartará automáticamente en Agenda para evitar colisiones con otras citas.
+                    </p>
+                  </>
+                ) : (
+                  <div className="p-2.5 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs">
+                    ⚠️ No hay turnos disponibles en el horario regular de la clínica para el {followupDate}. Por favor selecciona otra fecha para el control.
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2 col-span-2">
               <Label htmlFor="dischargeSummary">Resumen clínico</Label>
-              <Textarea id="dischargeSummary" name="dischargeSummary" rows={2} />
+              <Textarea
+                id="dischargeSummary"
+                name="dischargeSummary"
+                rows={2}
+                value={dischargeSummary}
+                onChange={(e) => setDischargeSummary(e.target.value)}
+                placeholder="Evolución y estado general del paciente al alta..."
+              />
             </div>
             <div className="space-y-2 col-span-2">
               <Label htmlFor="ownerInstructions">Indicaciones al propietario</Label>
-              <Textarea id="ownerInstructions" name="ownerInstructions" rows={2} />
+              <Textarea
+                id="ownerInstructions"
+                name="ownerInstructions"
+                rows={2}
+                value={ownerInstructions}
+                onChange={(e) => setOwnerInstructions(e.target.value)}
+                placeholder="Cuidados, reposo, dieta..."
+              />
             </div>
             <div className="space-y-2 col-span-2">
               <Label htmlFor="dischargeMedications">Medicamentos enviados</Label>
-              <Textarea id="dischargeMedications" name="dischargeMedications" rows={2} />
+              <Textarea
+                id="dischargeMedications"
+                name="dischargeMedications"
+                rows={2}
+                value={dischargeMedications}
+                onChange={(e) => setDischargeMedications(e.target.value)}
+                placeholder="Dosis, horarios y duración..."
+              />
             </div>
-            <DialogFooter className="col-span-2">
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit">Confirmar alta</Button>
+            <DialogFooter className="col-span-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={Boolean(followupDate && availableHours.length === 0)}
+              >
+                Confirmar alta
+              </Button>
             </DialogFooter>
           </form>
         )}

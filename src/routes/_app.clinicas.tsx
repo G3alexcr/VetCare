@@ -18,7 +18,7 @@ import {
 import {
   addBranch, addClinic, addPlan, deleteBranch, deleteClinic, deletePlan,
   reactivateClinic, suspendClinic, updateBranch, updateClinic, updatePlan, setCurrentClinic, setActingClinic,
-  useBranches, useClinicUsers, usePlans, useActingClinicId,
+  useBranches, useClinicUsers, usePlans, useActingClinicId, useCurrentClinicId,
   type Branch, type Clinic, type SubscriptionPlan,
 } from "@/lib/saas-store";
 import { useCurrentRoleId } from "@/lib/rbac";
@@ -26,18 +26,15 @@ import { useMyClinics } from "@/hooks/use-my-clinics";
 import { toast } from "sonner";
 
 function SaasRoute() {
-  const roleId = useCurrentRoleId();
-  const isSuper = roleId === "role_super";
-  const actingClinicId = useActingClinicId();
-
-  if (isSuper && !actingClinicId) {
-    return <SuperAdminLayout><SaasPage /></SuperAdminLayout>;
-  }
-  return <AppLayout><SaasPage /></AppLayout>;
+  return (
+    <AppLayout>
+      <SaasPage />
+    </AppLayout>
+  );
 }
 
 export const Route = createFileRoute("/_app/clinicas")({
-  head: () => ({ meta: [{ title: "Multi-Clínica · Super Admin — VetCare" }] }),
+  head: () => ({ meta: [{ title: "Multi-Clínica — Go2Vet" }] }),
   component: SaasRoute,
 });
 
@@ -67,40 +64,19 @@ function SaasPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ShieldCheck className="h-6 w-6 text-primary" />
-            {isSuper ? "Panel Super Administrador" : "Mis Clínicas"}
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Building2 className="h-6 w-6 text-primary" />
+            {isSuper ? "Multi-Clínica & Sedes" : "Mis Clínicas y Sucursales"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isSuper
-              ? "Administra clínicas, planes de suscripción, sucursales y estadísticas globales."
-              : "Entra a cada una de tus clínicas para gestionarlas."}
+              ? "Administra todas las clínicas registradas en la plataforma, cambia de sede y configura accesos."
+              : "Selecciona y gestiona las distintas clínicas o consultorios donde ejerces como médico veterinario."}
           </p>
         </div>
       </div>
 
-      {isSuper && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi icon={Building2} label="Clínicas totales" value={totals.clinics} tone="sky" />
-          <Kpi icon={PlayCircle} label="Activas" value={totals.active} tone="emerald" />
-          <Kpi icon={Users} label="Usuarios globales" value={totals.users} tone="violet" />
-          <Kpi icon={DollarSign} label="MRR estimado" value={`$${totals.mrr}`} tone="amber" />
-        </div>
-      )}
-
-      {isSuper ? (
-        <Tabs defaultValue="clinics">
-          <TabsList>
-            <TabsTrigger value="clinics"><Building2 className="h-4 w-4 mr-1.5" />Clínicas</TabsTrigger>
-            <TabsTrigger value="plans"><Package className="h-4 w-4 mr-1.5" />Planes</TabsTrigger>
-            <TabsTrigger value="branches"><PawPrint className="h-4 w-4 mr-1.5" />Sucursales</TabsTrigger>
-          </TabsList>
-          <TabsContent value="clinics" className="mt-4"><ClinicsTab clinics={clinics} plans={plans} isSuper={isSuper} /></TabsContent>
-          <TabsContent value="plans" className="mt-4"><PlansTab plans={plans} /></TabsContent>
-          <TabsContent value="branches" className="mt-4"><BranchesTab branches={branches} clinics={clinics} /></TabsContent>
-        </Tabs>
-      ) : (
-        <ClinicsTab clinics={clinics} plans={plans} isSuper={isSuper} />
-      )}
+      <ClinicsTab clinics={clinics} plans={plans} isSuper={isSuper} />
     </div>
   );
 }
@@ -125,13 +101,14 @@ function Kpi({ icon: Icon, label, value, tone }: { icon: any; label: string; val
 /* ---------- Clinics ---------- */
 function ClinicsTab({ clinics, plans, isSuper }: { clinics: Clinic[]; plans: SubscriptionPlan[]; isSuper: boolean }) {
   const navigate = useNavigate();
+  const currentClinicId = useCurrentClinicId();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Clinic | null>(null);
 
   const entrar = (c: Clinic) => {
     setCurrentClinic(c.id);
     if (isSuper) setActingClinic(c.id);
-    toast.success(`Entrando a ${c.name}`);
+    toast.success(`Cambiaste a la clínica: ${c.name}`);
     navigate({ to: "/dashboard" });
   };
 
@@ -139,7 +116,7 @@ function ClinicsTab({ clinics, plans, isSuper }: { clinics: Clinic[]; plans: Sub
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-muted-foreground">
-          {isSuper ? `${clinics.length} clínicas registradas` : `${clinics.length} clínica(s) donde eres miembro`}
+          {isSuper ? `${clinics.length} clínicas registradas` : `${clinics.length} clínica(s) disponibles en tu cuenta`}
         </div>
         {isSuper && (
           <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
@@ -163,15 +140,23 @@ function ClinicsTab({ clinics, plans, isSuper }: { clinics: Clinic[]; plans: Sub
           <TableBody>
             {clinics.map((c) => {
               const plan = plans.find((p) => p.id === c.subscriptionPlanId);
+              const isCurrent = c.id === currentClinicId;
               return (
-                <TableRow key={c.id}>
+                <TableRow key={c.id} className={isCurrent ? "bg-primary/5 font-medium" : undefined}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-lg grid place-items-center text-white text-xs font-bold" style={{ background: c.brandColor }}>
+                      <div className="h-8 w-8 rounded-lg grid place-items-center text-white text-xs font-bold shrink-0" style={{ background: c.brandColor }}>
                         {c.name.charAt(0)}
                       </div>
                       <div>
-                        <div className="font-medium">{c.name}</div>
+                        <div className="font-medium flex items-center gap-1.5">
+                          {c.name}
+                          {isCurrent && (
+                            <Badge variant="default" className="text-[10px] h-4 px-1.5 bg-emerald-600 hover:bg-emerald-700">
+                              En uso
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">{c.legalName} · {c.taxId}</div>
                       </div>
                     </div>
@@ -181,14 +166,17 @@ function ClinicsTab({ clinics, plans, isSuper }: { clinics: Clinic[]; plans: Sub
                   <TableCell><Badge variant="outline" className={statusColor[c.subscriptionStatus]}>{c.subscriptionStatus}</Badge></TableCell>
                   <TableCell className="text-sm">{c.email}<br /><span className="text-xs text-muted-foreground">{c.phone}</span></TableCell>
                   <TableCell className="text-right space-x-1">
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => entrar(c)} title={isSuper ? "Abrir en otra pestaña" : "Entrar a esta clínica"}>
-                      <LogIn className="h-4 w-4" /> Entrar
+                    <Button
+                      size="sm"
+                      variant={isCurrent ? "default" : "outline"}
+                      className="gap-1 text-xs"
+                      onClick={() => entrar(c)}
+                      title={isCurrent ? "Ir al Dashboard de esta clínica" : "Cambiar y entrar a esta clínica"}
+                    >
+                      <LogIn className="h-4 w-4" /> {isCurrent ? "Ver clínica" : "Cambiar clínica"}
                     </Button>
                     {isSuper && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => { setCurrentClinic(c.id); toast.success(`Clínica activa: ${c.name}`); }} title="Usar esta clínica">
-                          <CheckCircle className="h-4 w-4 text-emerald-600" />
-                        </Button>
                         {c.subscriptionStatus === "Suspendida" ? (
                           <Button size="sm" variant="ghost" onClick={() => { reactivateClinic(c.id); toast.success("Clínica reactivada"); }}><PlayCircle className="h-4 w-4 text-emerald-600" /></Button>
                         ) : (

@@ -182,7 +182,7 @@ const seedRoles: Role[] = [
       fotografias: { view: true, create: true, edit: true },
       veterinarios: { view: true },
       servicios: { view: true },
-      especies: { view: true, create: true },
+      especies: { view: true, create: true, edit: true, delete: true },
       inventario: { view: true },
       facturacion: { view: true },
       punto_venta: { view: true },
@@ -209,7 +209,7 @@ const seedRoles: Role[] = [
       facturacion: { view: true, create: true },
       punto_venta: { view: true, create: true },
       servicios: { view: true, create: true },
-      especies: { view: true, create: true },
+      especies: { view: true, create: true, edit: true },
       automatizacion: { view: true, create: true },
     }),
     createdAt: now,
@@ -255,7 +255,7 @@ const seedRoles: Role[] = [
       hospitalizacion: { view: true, edit: true },
       archivos: { view: true, create: true },
       fotografias: { view: true, create: true },
-      especies: { view: true },
+      especies: { view: true, create: true, edit: true },
       punto_venta: { view: true },
       inventario: { view: true },
     }),
@@ -353,6 +353,8 @@ export function mapLegacyRoleToRoleId(legacy: string): string {
 
 export function hasPermission(roleId: string | undefined, mod: RbacModule, action: RbacAction): boolean {
   if (!roleId) return false;
+  // El dueño/superadministrador de la plataforma tiene acceso total e irrestricto sin depender de roles locales de clínica
+  if (roleId === "role_super") return true;
   const role = state.roles.find((r) => r.id === roleId);
   if (!role) return false;
   return !!role.permissions[mod]?.[action];

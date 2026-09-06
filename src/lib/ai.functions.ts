@@ -55,7 +55,7 @@ export const runVetCareAI = createServerFn({ method: "POST" })
     // Si no hay ninguna clave ni gateway configurado, devolvemos una respuesta asistida estructurada
     if (!effectiveApiKey && !effectiveBaseUrl) {
       return {
-        text: `### 🩺 VetCare AI (Asistencia Clínica Provisoria)
+        text: `### 🩺 Go2Vet AI (Asistencia Clínica Provisoria)
 No se ha detectado una **API Key** configurada para esta clínica.
 
 > [!TIP]

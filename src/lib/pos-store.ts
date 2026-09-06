@@ -92,6 +92,12 @@ export type PosOrder = {
   id: string;
   number: string;
   clientName: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  deliveryMethod?: "retiro" | "domicilio";
+  deliveryAddress?: string;
+  paymentMethod?: string;
+  paymentStatus?: "Pendiente" | "Pagado";
   items: PosOrderItem[];
   total: number;
   status: PosOrderStatus;
@@ -289,14 +295,32 @@ function mapOrderItem(r: DbRow): PosOrderItem {
 }
 
 function mapOrder(r: DbRow, items: PosOrderItem[]): PosOrder {
+  const notesStr = String(r.notes ?? "");
+  const telMatch = notesStr.match(/Tel:\s*([^|]+)/i);
+  const entregaMatch = notesStr.match(/Entrega:\s*([^|]+)/i);
+  const pagoMatch = notesStr.match(/Pago:\s*([^|]+)/i);
+
+  const clientPhone = r.client_phone ? String(r.client_phone) : telMatch ? telMatch[1].trim() : undefined;
+  const clientEmail = r.client_email ? String(r.client_email) : undefined;
+  const deliveryMethod = (r.delivery_method as "retiro" | "domicilio") || (entregaMatch ? (entregaMatch[1].includes("domicilio") ? "domicilio" : "retiro") : undefined);
+  const deliveryAddress = r.delivery_address ? String(r.delivery_address) : entregaMatch && entregaMatch[1].includes("(") ? entregaMatch[1].replace(/.*\(|\).*/g, "").trim() : undefined;
+  const paymentMethod = r.payment_method ? String(r.payment_method) : pagoMatch ? pagoMatch[1].split("(")[0].trim() : undefined;
+  const paymentStatus = (r.payment_status as "Pendiente" | "Pagado") || (pagoMatch && pagoMatch[1].includes("Pagado") ? "Pagado" : "Pendiente");
+
   return {
     id: String(r.id ?? ""),
     number: String(r.number ?? ""),
     clientName: String(r.client_name ?? ""),
+    clientPhone,
+    clientEmail,
+    deliveryMethod,
+    deliveryAddress,
+    paymentMethod,
+    paymentStatus,
     items,
     total: Number(r.total ?? 0),
     status: (r.status as PosOrderStatus) ?? "Pendiente",
-    notes: String(r.notes ?? ""),
+    notes: notesStr,
     source: r.source != null && String(r.source) !== "" ? (String(r.source) as "presencial" | "online") : undefined,
     clinicId: String(r.clinic_id ?? ""),
     createdAt: String(r.created_at ?? new Date().toISOString()),
@@ -318,8 +342,8 @@ type PosState = {
   orderCounter: number;
 };
 
-let saleCounter = 1002;
-let orderCounter = 1;
+let saleCounter = 1000;
+let orderCounter = 0;
 let state: PosState = {
   categories: [],
   products: [],
@@ -380,12 +404,8 @@ export async function hydratePos(_clinicId: string): Promise<void> {
     const n = parseInt(stripped, 10);
     return Number.isFinite(n) ? n : 0;
   };
-  if (sales.length) {
-    saleCounter = sales.reduce((m, s) => Math.max(m, stripPrefix(s.number, SALE_PREFIX)), 0) + 1;
-  }
-  if (orders.length) {
-    orderCounter = orders.reduce((m, o) => Math.max(m, stripPrefix(o.number, ORDER_PREFIX)), 0) + 1;
-  }
+  saleCounter = sales.length ? sales.reduce((m, s) => Math.max(m, stripPrefix(s.number, SALE_PREFIX)), 0) : 1000;
+  orderCounter = orders.length ? orders.reduce((m, o) => Math.max(m, stripPrefix(o.number, ORDER_PREFIX)), 0) : 0;
 
   set(() => ({ ...state, categories, products, movements, sales, orders, sessions, cashMovements, saleCounter, orderCounter }));
 }
@@ -754,6 +774,15 @@ export function addPosOrder(o: Omit<PosOrder, "id" | "createdAt" | "number" | "c
   const next = state.orderCounter + 1;
   const item: PosOrder = { ...o, source: o.source ?? "presencial", id: uid(), number: `${ORDER_PREFIX}${next}`, clinicId: getCurrentClinicId(), createdAt: now() };
   set((s) => ({ ...s, orderCounter: next, orders: [item, ...s.orders] }));
+
+  const summaryParts = [
+    item.notes,
+    item.clientPhone ? `Tel: ${item.clientPhone}` : null,
+    item.deliveryMethod ? `Entrega: ${item.deliveryMethod === "domicilio" ? `A domicilio (${item.deliveryAddress || ""})` : "Retiro en clínica"}` : null,
+    item.paymentMethod ? `Pago: ${item.paymentMethod} (${item.paymentStatus || "Pendiente"})` : null,
+  ].filter(Boolean);
+  const fullNotes = summaryParts.join(" | ");
+
   fire(
     db.from("orders").insert({
       id: item.id,
@@ -762,7 +791,7 @@ export function addPosOrder(o: Omit<PosOrder, "id" | "createdAt" | "number" | "c
       client_name: item.clientName,
       total: item.total,
       status: item.status,
-      notes: item.notes,
+      notes: fullNotes || item.notes,
       source: item.source ?? "presencial",
     })
   );

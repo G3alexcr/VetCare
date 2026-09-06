@@ -3,6 +3,7 @@ import { registerHydrator, type DbRow } from "./db-hooks";
 import { getCurrentClinicId } from "./saas-store";
 import { useTenantSlice } from "./tenant";
 import { formatCRC } from "./billing-store";
+import { toLocalDateStr } from "./utils";
 
 export { formatCRC };
 
@@ -88,11 +89,11 @@ type State = {
   quoCounter: number;
 };
 
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => toLocalDateStr(new Date());
 const addDays = (days: number) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return toLocalDateStr(d);
 };
 
 const calcTotals = (items: FinanceItem[], globalDiscount: number, taxRate = 0.13) => {
@@ -412,17 +413,19 @@ export const finance = {
 };
 
 export function receivables() {
-  return state.invoices.filter((i) => i.balance > 0 && i.status !== "Anulada");
+  const cid = getCurrentClinicId();
+  return state.invoices.filter((i) => i.clinicId === cid && i.balance > 0 && i.status !== "Anulada");
 }
 
 export function financeStats() {
+  const cid = getCurrentClinicId();
   const t = today();
   const monthPrefix = t.slice(0, 7);
-  const paid = state.invoices.filter((i) => i.status !== "Anulada");
+  const paid = state.invoices.filter((i) => i.clinicId === cid && i.status !== "Anulada");
   const salesToday = paid.filter((i) => i.date === t).reduce((a, i) => a + i.total, 0);
   const salesMonth = paid.filter((i) => i.date.startsWith(monthPrefix)).reduce((a, i) => a + i.total, 0);
   const pending = paid.filter((i) => i.balance > 0).reduce((a, i) => a + i.balance, 0);
-  const income = state.payments.reduce((a, p) => a + p.amount, 0);
+  const income = state.payments.filter((p) => p.clinicId === cid).reduce((a, p) => a + p.amount, 0);
   const avg = paid.length ? Math.round(paid.reduce((a, i) => a + i.total, 0) / paid.length) : 0;
   return { salesToday, salesMonth, pending, income, avg, invoicesCount: paid.length };
 }

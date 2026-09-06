@@ -735,7 +735,13 @@ export async function fetchPublicSite(slug: string) {
   const settings = mapSettings(s);
   const services = (sv.data ?? []).map(mapService);
   const slides = (sl.data ?? []).map(mapSlide);
-  const clinic = cl.data ? { name: String(cl.data.name ?? ""), logo_url: String(cl.data.logo_url ?? "") } : null;
+  const fallbackClinicName = settings.identity.name?.trim() || (cleanSlug === "pawspattient" ? "Paws Pattient" : "Clínica Veterinaria");
+  const clinic = cl.data && cl.data.name
+    ? { name: String(cl.data.name), logo_url: String(cl.data.logo_url || settings.identity.logo_url || "") }
+    : { name: fallbackClinicName, logo_url: settings.identity.logo_url || "" };
+  if (!settings.identity.name) {
+    settings.identity.name = clinic.name;
+  }
   const team = (te.data ?? []).map((r: Record<string, unknown>) => ({ id: String(r.id), name: String(r.nombre ?? ""), role: String(r.especialidad ?? ""), photo: String(r.foto ?? ""), description: String(r.notas ?? ""), specialties: [] as string[] }));
   const testimonials = (tm.data ?? []).map((r: Record<string, unknown>) => ({ id: String(r.id), author: String(r.author ?? ""), pet_name: String(r.pet_name ?? ""), role: String(r.role ?? ""), content: String(r.content ?? ""), rating: Number(r.rating ?? 5), photo_url: r.photo_url as string | null }));
   const gallery = (ga.data ?? []).map((r: Record<string, unknown>) => ({ id: String(r.id), title: String(r.title ?? ""), image_url: String(r.image_url ?? "") }));

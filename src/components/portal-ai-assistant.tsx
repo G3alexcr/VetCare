@@ -159,7 +159,7 @@ export function PortalAIAssistant() {
       const systemPrompt =
         activeTab === "traductor"
           ? "Eres un traductor médico veterinario empático. Explica los términos diagnósticos complejos, recetas o exámenes de laboratorio en un lenguaje cotidiano, cálido y fácil de comprender para el dueño de una mascota. Recuerda siempre que el veterinario tratante tiene la palabra final."
-          : `Eres el asistente virtual de la clínica veterinaria ${clinic?.name || "VetCare"}. Atiendes amablemente a los dueños de mascotas. Da recomendaciones de cuidados preventivos, orientación de signos de alarma y sugiere agendar cita si los síntomas persisten. No recetes fármacos de venta bajo receta médica.`;
+          : `Eres el asistente virtual de la clínica veterinaria ${clinic?.name || "Go2Vet"}. Atiendes amablemente a los dueños de mascotas. Da recomendaciones de cuidados preventivos, orientación de signos de alarma y sugiere agendar cita si los síntomas persisten. No recetes fármacos de venta bajo receta médica.`;
 
       const response = await runVetCareAI({
         data: {
@@ -226,13 +226,13 @@ export function PortalAIAssistant() {
       {/* Botón flotante en el Portal */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 shadow-xl hover:shadow-2xl hover:scale-[1.03] transition-all text-sm font-semibold border-2 border-white/20 group"
+        className="fixed bottom-14 sm:bottom-16 right-4 sm:right-6 z-40 flex items-center gap-2.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 shadow-xl hover:shadow-2xl hover:scale-[1.03] transition-all text-sm font-semibold border-2 border-white/20 group"
       >
         <div className="relative">
           <Sparkles className="h-5 w-5 text-amber-300 animate-pulse" />
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-teal-600" />
         </div>
-        <span>Asistente VetCare</span>
+        <span>Asistente Go2Vet</span>
         <Badge variant="secondary" className="bg-teal-800 text-teal-100 text-[10px] uppercase tracking-wider font-bold">
           24/7
         </Badge>
@@ -250,7 +250,7 @@ export function PortalAIAssistant() {
                 </div>
                 <div>
                   <SheetTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                    VetCare Guía & Triaje
+                    Go2Vet Guía & Triaje
                   </SheetTitle>
                   <p className="text-[11px] text-muted-foreground">Orientación clínica inmediata para tu mascota</p>
                 </div>
@@ -354,7 +354,7 @@ export function PortalAIAssistant() {
 
             {loading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground p-3 bg-white dark:bg-slate-900 rounded-2xl border w-fit">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" /> Analizando síntomas con VetCare AI...
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" /> Analizando síntomas con Go2Vet AI...
               </div>
             )}
             <div ref={chatBottomRef} />

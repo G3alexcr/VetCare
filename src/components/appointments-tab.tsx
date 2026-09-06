@@ -30,6 +30,7 @@ import { useClientes } from "@/lib/clientes-store";
 import { usePets } from "@/lib/pets-store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
 import { toast } from "sonner";
+import { toLocalDateStr } from "@/lib/utils";
 
 const statuses: AppointmentStatus[] = ["Pendiente", "Confirmada", "En atención", "Finalizada", "Cancelada"];
 
@@ -41,12 +42,12 @@ const statusColors: Record<AppointmentStatus, string> = {
   "Cancelada": "bg-rose-100 text-rose-700 border-rose-200",
 };
 
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => toLocalDateStr(new Date());
 
 function tomorrowISO() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().split("T")[0];
+  return toLocalDateStr(d);
 }
 
 function alertFor(a: Appointment) {
@@ -87,7 +88,7 @@ export function AppointmentsTab({ petId }: { petId: string }) {
     const d = Object.fromEntries(fd.entries()) as Record<string, string>;
     if (editing) {
       updateAppointment(editing.id, {
-        date: d.date,
+        date: toLocalDateStr(d.date),
         time: d.time,
         vetId: d.vetId,
         reason: d.reason,
@@ -96,8 +97,8 @@ export function AppointmentsTab({ petId }: { petId: string }) {
       toast.success("Cita actualizada");
     } else {
       addAppointment({
-        id: `a${Date.now()}`,
-        date: d.date,
+        id: crypto.randomUUID(),
+        date: toLocalDateStr(d.date),
         time: d.time,
         clientId: defaultClientId,
         petId,

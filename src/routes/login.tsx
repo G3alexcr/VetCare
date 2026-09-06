@@ -10,10 +10,12 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 
 import { getAllClientes } from "@/lib/clientes-store";
+import { Go2VetLogo } from "@/components/Go2VetLogo";
+import { LegalModal, type LegalPolicyKey } from "@/components/legal-modal";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
-    meta: [{ title: "Iniciar sesión — VetCare" }],
+    meta: [{ title: "Iniciar sesión — Go2Vet" }],
   }),
   component: LoginPage,
 });
@@ -29,6 +31,13 @@ function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState<LegalPolicyKey>("datos-personales");
+
+  const openLegal = (policy: LegalPolicyKey) => {
+    setSelectedPolicy(policy);
+    setLegalModalOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +61,7 @@ function LoginPage() {
       toast.error(res.error ?? "Error de autenticación");
       return;
     }
-    toast.success("Bienvenido a VetCare");
+    toast.success("Bienvenido a Go2Vet");
     navigate({ to: res.user?.role === "super" ? "/admin" : "/dashboard" });
   };
 
@@ -76,7 +85,7 @@ function LoginPage() {
     if (error) { toast.error(error.message); return; }
     if (data.session?.user) {
       // Confirmación de email desactivada: la sesión ya está iniciada.
-      toast.success("Cuenta creada. ¡Bienvenido a VetCare!");
+      toast.success("Cuenta creada. ¡Bienvenido a Go2Vet!");
       navigate({ to: "/dashboard" });
     } else {
       toast.success("Cuenta creada. Revisa tu correo para confirmar tu dirección.");
@@ -88,12 +97,7 @@ function LoginPage() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <div className="hidden lg:flex relative bg-gradient-to-br from-primary to-primary/70 p-12 text-primary-foreground flex-col justify-between overflow-hidden">
-        <div className="flex items-center gap-2">
-          <div className="h-10 w-10 rounded-xl bg-white/15 grid place-items-center">
-            <PawPrint className="h-5 w-5" />
-          </div>
-          <span className="font-semibold text-lg">VetCare</span>
-        </div>
+        <Go2VetLogo size="md" variant="light" />
         <div className="relative z-10">
           <h1 className="text-4xl font-bold leading-tight">
             La plataforma moderna para tu clínica veterinaria.
@@ -103,18 +107,15 @@ function LoginPage() {
             Diseñado para equipos veterinarios profesionales.
           </p>
         </div>
-        <div className="text-xs text-primary-foreground/70">© 2026 VetCare. Todos los derechos reservados.</div>
+        <div className="text-xs text-primary-foreground/70">© 2026 Go2Vet. Todos los derechos reservados.</div>
         <div className="absolute -bottom-20 -right-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute top-10 right-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
       </div>
 
       <div className="flex items-center justify-center p-6 md:p-12">
         <Card className="w-full max-w-md p-8 shadow-lg border-border/60">
-          <div className="lg:hidden flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground grid place-items-center">
-              <PawPrint className="h-5 w-5" />
-            </div>
-            <span className="font-semibold text-lg">VetCare</span>
+          <div className="lg:hidden flex items-center mb-6">
+            <Go2VetLogo size="md" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight">
             {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
@@ -122,7 +123,7 @@ function LoginPage() {
           <p className="text-sm text-muted-foreground mt-1">
             {mode === "login"
               ? "Ingresa tus credenciales para acceder al panel"
-              : "Regístrate para crear tu cuenta en VetCare"}
+              : "Regístrate para crear tu cuenta en Go2Vet"}
           </p>
 
           <form onSubmit={mode === "login" ? handleSubmit : handleRegister} className="mt-6 space-y-4">
@@ -239,8 +240,40 @@ function LoginPage() {
               Ingresa al Portal
             </Link>
           </div>
+
+          <div className="mt-6 pt-4 border-t border-border/60 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => openLegal("datos-personales")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Habeas Data
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal("aplicativos-web")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Aplicativos Web
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal("condiciones-uso")}
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Condiciones de Uso
+            </button>
+          </div>
         </Card>
       </div>
+
+      <LegalModal
+        open={legalModalOpen}
+        onOpenChange={setLegalModalOpen}
+        initialPolicy={selectedPolicy}
+      />
     </div>
   );
 }

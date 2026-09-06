@@ -16,6 +16,8 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationsMenu } from "@/components/notifications-menu";
 import { UserNavDropdown } from "@/components/user-nav-dropdown";
+import { Go2VetLogo } from "@/components/Go2VetLogo";
+import { AppFooter } from "@/components/AppFooter";
 
 export function SuperAdminLayout({ children }: { children?: ReactNode }) {
   const { user, ready, logout } = useAuth();
@@ -79,20 +81,7 @@ export function SuperAdminLayout({ children }: { children?: ReactNode }) {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2.5 flex items-center justify-between gap-3">
             {/* Logo y título de Plataforma */}
             <div className="flex items-center gap-4 sm:gap-6 min-w-0">
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-md shadow-primary/20 shrink-0">
-                  <PawPrint className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="font-extrabold text-base sm:text-lg tracking-tight">VetCare</span>
-                    <Badge variant="outline" className="border-primary/40 text-primary bg-primary/10 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider py-0 px-1.5 sm:px-2 shrink-0">
-                      Super Admin
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium truncate">Centro de Mando SaaS</p>
-                </div>
-              </div>
+              <Go2VetLogo badgeText="SUPER ADMIN" subtitle="Centro de Mando SaaS" />
 
               {/* Enlaces de plataforma */}
               <nav className="hidden md:flex items-center gap-1 pl-4 border-l border-border">
@@ -134,6 +123,8 @@ export function SuperAdminLayout({ children }: { children?: ReactNode }) {
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {children}
         </main>
+
+        <AppFooter />
       </div>
     </>
   );

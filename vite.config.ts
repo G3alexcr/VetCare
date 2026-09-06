@@ -35,8 +35,8 @@ export default defineConfig({
       manifestFilename: "manifest.webmanifest",
       manifest: {
         id: "/",
-        name: "VetCare — Gestión para Clínicas Veterinarias",
-        short_name: "VetCare",
+        name: "Go2Vet — Gestión para Clínicas Veterinarias",
+        short_name: "Go2Vet",
         description:
           "Gestiona clientes, mascotas, agenda, consultas, hospitalización, caja e inventario de tu clínica veterinaria.",
         lang: "es",

@@ -256,6 +256,12 @@ export const useBranches = () => useSyncExternalStore(subscribe, () => state.bra
 export const useClinicUsers = () => useSyncExternalStore(subscribe, () => state.users, () => state.users);
 export const useCurrentClinicId = () => useSyncExternalStore(subscribe, () => state.currentClinicId, () => state.currentClinicId);
 
+export const useCurrentClinic = () => {
+  const clinicId = useCurrentClinicId();
+  const clinics = useClinics();
+  return clinics.find((c) => c.id === clinicId) || clinics[0] || null;
+};
+
 export const setCurrentClinic = (id: string) => {
   setState((s) => ({ ...s, currentClinicId: id }));
 };

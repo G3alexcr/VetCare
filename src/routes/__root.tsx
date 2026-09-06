@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "VetCare — Gestión para Clínicas Veterinarias" },
+      { title: "Go2Vet — Gestión para Clínicas Veterinarias" },
       {
         name: "description",
         content:
@@ -87,8 +87,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
-      { name: "apple-mobile-web-app-title", content: "VetCare" },
-      { property: "og:title", content: "VetCare — Gestión para Clínicas Veterinarias" },
+      { name: "apple-mobile-web-app-title", content: "Go2Vet" },
+      { property: "og:title", content: "Go2Vet — Gestión para Clínicas Veterinarias" },
       {
         property: "og:description",
         content:

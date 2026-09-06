@@ -90,7 +90,7 @@ export function CarnetTab({ pet }: { pet: Pet }) {
       <div class="sec">Control de Parásitos</div>
       <table><thead><tr><th>Fecha</th><th>Producto</th><th>Próxima</th><th>Veterinario</th><th>Estado</th></tr></thead>
       <tbody>${rows(dewormings.map((d) => ({ d: d.applicationDate, n: d.productName, nxt: d.nextApplicationDate, vet: d.veterinarian, st: getDewormingStatus(d.nextApplicationDate).label })))}</tbody></table>
-      <p style="font-size:11px;color:#666">Generado por VetCare · ${new Date().toLocaleDateString("es-CR")}</p>
+      <p style="font-size:11px;color:#666">Generado por Go2Vet · ${new Date().toLocaleDateString("es-CR")}</p>
       </body></html>`);
     w.document.close();
     w.focus();

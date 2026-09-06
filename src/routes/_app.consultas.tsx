@@ -14,6 +14,9 @@ import { useConsultations, addConsultation, type LinkedConsultation } from "@/li
 import { openVetCareAI } from "@/lib/ai-store";
 import { toast } from "sonner";
 
+import { useClientes } from "@/lib/clientes-store";
+import { PayConsultationDialog, type PayConsultationData } from "@/components/pay-consultation-dialog";
+
 export const Route = createFileRoute("/_app/consultas")({
   head: () => ({ meta: [{ title: "Consultas — VetCare" }] }),
   component: () => <AppLayout><ConsultationsPage /></AppLayout>,
@@ -23,8 +26,10 @@ function ConsultationsPage() {
   const items = useConsultations();
   const pets = usePets();
   const vets = useVeterinarios();
+  const clientes = useClientes();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<LinkedConsultation | null>(null);
+  const [payData, setPayData] = useState<PayConsultationData | null>(null);
 
   return (
     <div className="space-y-6">
@@ -46,15 +51,33 @@ function ConsultationsPage() {
               <ConsultationForm
                 onCancel={() => setOpen(false)}
                 onSubmit={(data) => {
-                  addConsultation({ ...data, id: `co${Date.now()}` });
+                  addConsultation({ ...data, id: crypto.randomUUID() });
                   setOpen(false);
                   toast.success("Consulta registrada");
+                  const pet = pets.find((p) => p.id === data.petId);
+                  const client = clientes.find((cl) => cl.id === (data.clientId || pet?.clientId));
+                  const vet = vets.find((v) => v.id === data.vetId);
+                  setPayData({
+                    clientName: client?.fullName || "Cliente general",
+                    clientId: client?.id,
+                    petName: pet?.name,
+                    vetName: vet?.nombre,
+                    reason: data.reason,
+                    defaultAmount: 15000,
+                  });
                 }}
               />
             </DialogContent>
           </Dialog>
         </div>
       </div>
+
+      <PayConsultationDialog
+        open={payData !== null}
+        onOpenChange={(o) => { if (!o) setPayData(null); }}
+        data={payData}
+        onSuccess={() => setPayData(null)}
+      />
 
       <div className="grid gap-4">
         {items.map((c) => {

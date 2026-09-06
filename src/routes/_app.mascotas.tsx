@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Pencil, Trash2, Cake, Weight, LayoutGrid, Table as TableIcon } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Cake, Weight, LayoutGrid, Table as TableIcon, Mail } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,11 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AppLayout } from "@/components/app-layout";
 import { usePets, addPet, updatePet, deletePet, type TenantPet } from "@/lib/pets-store";
-import { useClientes } from "@/lib/clientes-store";
+import { useClientes, type ClinicClient } from "@/lib/clientes-store";
 import { getRazasDeEspecie, useEspecies } from "@/lib/especies-store";
 import { ImageInput } from "@/components/image-input";
 import { PetRecordDialog } from "@/components/pet-record-dialog";
+import { PortalInvitationDialog } from "@/components/portal-invitation-dialog";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/mascotas")({
@@ -49,6 +50,9 @@ function PetsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TenantPet | null>(null);
   const [detail, setDetail] = useState<TenantPet | null>(null);
+  const [invitationOpen, setInvitationOpen] = useState(false);
+  const [invitationClient, setInvitationClient] = useState<ClinicClient | null>(null);
+  const [invitationPet, setInvitationPet] = useState<TenantPet | null>(null);
 
   const especies = useEspecies();
   const especiesActivas = useMemo(
@@ -117,8 +121,14 @@ function PetsPage() {
       updatePet(editing.id, base);
       toast.success("Mascota actualizada");
     } else {
-      addPet(base);
-      toast.success("Mascota registrada");
+      const created = addPet(base);
+      toast.success("Mascota registrada exitosamente");
+      const clientObj = clientes.find((c) => c.id === base.clientId);
+      if (clientObj) {
+        setInvitationClient(clientObj);
+        setInvitationPet(created);
+        setInvitationOpen(true);
+      }
     }
     setOpen(false);
     setEditing(null);
@@ -244,6 +254,22 @@ function PetsPage() {
                     <Button variant="ghost" size="sm" className="flex-1" onClick={() => { setEditing(p); setOpen(true); }}>
                       <Pencil className="h-3 w-3 mr-1" /> Editar
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Enviar acceso al Portal"
+                      onClick={() => {
+                        if (owner) {
+                          setInvitationClient(owner);
+                          setInvitationPet(p);
+                          setInvitationOpen(true);
+                        } else {
+                          toast.error("Esta mascota no tiene un tutor asignado");
+                        }
+                      }}
+                    >
+                      <Mail className="h-3.5 w-3.5 text-emerald-600" />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => { deletePet(p.id); toast.success("Eliminada"); }}>
                       <Trash2 className="h-3 w-3 text-destructive" />
                     </Button>
@@ -286,12 +312,30 @@ function PetsPage() {
                     <TableCell>{p.weight} kg</TableCell>
                     <TableCell>{owner?.name ?? "—"}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => { setEditing(p); setOpen(true); }}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { deletePet(p.id); toast.success("Eliminada"); }}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Enviar acceso al Portal Propietario"
+                          onClick={() => {
+                            if (owner) {
+                              setInvitationClient(owner);
+                              setInvitationPet(p);
+                              setInvitationOpen(true);
+                            } else {
+                              toast.error("Esta mascota no tiene un tutor asignado");
+                            }
+                          }}
+                        >
+                          <Mail className="h-3.5 w-3.5 text-emerald-600" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditing(p); setOpen(true); }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => { deletePet(p.id); toast.success("Eliminada"); }}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -308,6 +352,13 @@ function PetsPage() {
         pet={detail}
         onClose={() => setDetail(null)}
         onEdit={(p) => { setEditing(p as TenantPet); setOpen(true); setDetail(null); }}
+      />
+
+      <PortalInvitationDialog
+        open={invitationOpen}
+        onOpenChange={setInvitationOpen}
+        client={invitationClient}
+        pet={invitationPet}
       />
     </div>
   );
