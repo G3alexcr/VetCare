@@ -149,28 +149,26 @@ El equipo de ${clinicName}`;
       });
     } catch {}
 
-    const waText = `⭐ *${clinicName.toUpperCase()}*
-- - - - - - - - - - - - - - - - - - -
+    const waText = `*${clinicName}*
+_________________________________
 
-¡Hola *${client.fullName || client.name}*! 👋
+Hola *${client.fullName || client.name}*,
 
-Nos da mucho gusto informarte que tu mascota *${petName}* ya está registrada en nuestro sistema clínico. 🌟
+Tu mascota *${petName}* ya esta registrada en nuestro sistema clinico. Te hemos creado acceso personal al *Portal del Propietario*, donde podras:
 
-Hemos creado tu acceso personal al *Portal del Propietario*, donde podrás:
+  - Ver el historial medico completo
+  - Carnet digital de vacunas y desparasitacion
+  - Agendar y reprogramar citas las 24 horas
+  - Consultar recetas y tratamientos
 
-✅ Ver el historial médico completo de ${petName}
-✅ Carnet digital de vacunas y desparasitacion
-✅ Agendar y reprogramar citas las 24 horas
-✅ Consultar recetas y tratamientos en cualquier momento
-
-- - - - - - - - - - - - - - - - - - -
-➡️ *ACTIVA TU CUENTA AQUI:*
+_________________________________
+*ACTIVA TU CUENTA AQUI:*
 ${portalUrl}
-- - - - - - - - - - - - - - - - - - -
+_________________________________
 
-_Solo ingresa con tu correo_ *${client.email || "registrado"}*, _crea tu contrasena y veras todo el expediente de ${petName} al instante. Es gratis!_
+_Ingresa con tu correo_ *${client.email || "registrado"}* _y crea tu contrasena. Veras todo el expediente de ${petName} al instante. Es gratis._
 
-Con carino 💚
+Atentamente,
 *${clinicName}*`;
 
     window.open(`https://wa.me/${rawNumber}?text=${encodeURIComponent(waText)}`, "_blank");
