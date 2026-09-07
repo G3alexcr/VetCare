@@ -546,32 +546,110 @@ function useTTS() {
 
 // ---------------- Herramientas ----------------
 
-function useSpeechDictation(onTranscript: (chunk: string) => void) {
+function useSpeechDictation({
+  onTranscript,
+  onAutoSend,
+  onStopTTS,
+}: {
+  onTranscript: (chunk: string) => void;
+  onAutoSend: (fullText: string) => void;
+  onStopTTS?: () => void;
+}) {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const textBufferRef = useRef<string>("");
+
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  };
+
+  const stopAndSend = () => {
+    clearSilenceTimer();
+    const finalQuery = textBufferRef.current.trim();
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setListening(false);
+    if (finalQuery) {
+      textBufferRef.current = "";
+      onTranscript("");
+      onAutoSend(finalQuery);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRec) {
-      const rec = new SpeechRec();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.lang = "es-ES";
-      rec.onresult = (e: any) => {
-        let text = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            text += e.results[i][0].transcript + " ";
-          }
+    if (!SpeechRec) return;
+
+    const rec = new SpeechRec();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "es-ES";
+
+    rec.onresult = (e: any) => {
+      let finalTranscript = "";
+      let interimTranscript = "";
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscript += text + " ";
+        } else {
+          interimTranscript += text;
         }
-        if (text) onTranscript(text);
-      };
-      rec.onerror = () => setListening(false);
-      rec.onend = () => setListening(false);
-      recognitionRef.current = rec;
-    }
-  }, [onTranscript]);
+      }
+
+      if (finalTranscript) {
+        textBufferRef.current += finalTranscript;
+      }
+      const combined = (textBufferRef.current + interimTranscript).trim();
+      if (combined) {
+        onTranscript(combined);
+      }
+
+      // Detección automática de silencio: Cuando el usuario termina de hablar y pasa una pausa natural de 1.6s,
+      // se detiene el micrófono y se envía la consulta automáticamente (estilo Google / Alexa)
+      clearSilenceTimer();
+      if (combined.length > 2) {
+        silenceTimerRef.current = setTimeout(() => {
+          stopAndSend();
+        }, 1600);
+      }
+    };
+
+    rec.onerror = (err: any) => {
+      console.warn("Speech recognition error:", err);
+      clearSilenceTimer();
+      setListening(false);
+    };
+
+    rec.onend = () => {
+      clearSilenceTimer();
+      setListening(false);
+      const query = textBufferRef.current.trim();
+      if (query) {
+        textBufferRef.current = "";
+        onTranscript("");
+        onAutoSend(query);
+      }
+    };
+
+    recognitionRef.current = rec;
+
+    return () => {
+      clearSilenceTimer();
+      try {
+        rec.stop();
+      } catch {}
+    };
+  }, [onTranscript, onAutoSend]);
 
   const toggle = () => {
     if (!recognitionRef.current) {
@@ -579,21 +657,21 @@ function useSpeechDictation(onTranscript: (chunk: string) => void) {
       return;
     }
     if (listening) {
-      recognitionRef.current.stop();
-      setListening(false);
-      toast.info("Dictado pausado.");
+      stopAndSend();
     } else {
       try {
+        if (onStopTTS) onStopTTS();
+        textBufferRef.current = "";
         recognitionRef.current.start();
         setListening(true);
-        toast.info("🎙️ Escuchando... Dicta tus notas clínicas.");
+        toast.info("🎙️ Escuchando... Habla libremente, responderá solo al terminar.");
       } catch (err) {
         console.error(err);
       }
     }
   };
 
-  return { listening, toggle };
+  return { listening, toggle, stopAndSend };
 }
 
 function ChatTool() {
@@ -610,8 +688,10 @@ function ChatTool() {
   const { speak, stop, speaking } = useTTS();
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
 
-  const { listening, toggle: toggleDictation } = useSpeechDictation((transcribed) => {
-    setInput((prev) => (prev ? `${prev} ${transcribed}` : transcribed));
+  const { listening, toggle: toggleDictation, stopAndSend } = useSpeechDictation({
+    onTranscript: (transcribed) => setInput(transcribed),
+    onAutoSend: (fullText) => void send(fullText),
+    onStopTTS: () => stop(),
   });
 
   useEffect(() => {
@@ -664,8 +744,8 @@ function ChatTool() {
     setInput(cmd + " ");
   };
 
-  const send = async () => {
-    const question = input.trim();
+  const send = async (textOverride?: string) => {
+    const question = (textOverride !== undefined ? textOverride : input).trim();
     if (!question || loading) return;
 
     if (question.startsWith("/")) {
@@ -788,9 +868,18 @@ function ChatTool() {
 
       <div className="mt-3 space-y-2">
         {listening && (
-          <div className="flex items-center gap-2 text-xs text-red-600 font-medium bg-red-50 dark:bg-red-950/30 rounded-xl px-3 py-1.5 border border-red-200 dark:border-red-800">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
-            Escuchando tu voz en tiempo real — lo que digas aparecerá en el campo de texto abajo
+          <div className="flex items-center justify-between text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 rounded-xl px-3.5 py-2 border border-red-200 dark:border-red-800 animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block animate-ping" />
+              <span>🎙️ <b>Escuchando...</b> Habla y responderá automáticamente al terminar la frase.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => stopAndSend()}
+              className="text-[11px] underline font-semibold text-red-700 dark:text-red-300 ml-2 hover:opacity-80 cursor-pointer"
+            >
+              Responder ya →
+            </button>
           </div>
         )}
         <div className="flex gap-2 items-center">
@@ -799,13 +888,13 @@ function ChatTool() {
             size="icon"
             variant={listening ? "destructive" : "outline"}
             onClick={toggleDictation}
-            title={listening ? "Detener dictado de voz" : "Dictar por voz (el texto aparece abajo)"}
+            title={listening ? "Detener y responder" : "Hablar con Go2Vet AI (manos libres)"}
             className={`h-10 w-10 shrink-0 rounded-xl transition-all ${listening ? "animate-pulse ring-2 ring-red-500" : ""}`}
           >
             {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-teal-600" />}
           </Button>
           <Input
-            placeholder="Escribe aquí o dicta con el micrófono (ambas opciones siempre disponibles)…"
+            placeholder="Escribe aquí o presiona el micrófono para hablar manos libres…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
