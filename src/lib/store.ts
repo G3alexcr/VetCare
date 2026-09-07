@@ -1101,37 +1101,58 @@ export function addConsultation(c: Omit<LinkedConsultation, "clinicId"> & { clie
   }).catch((e) => console.error(e));
 }
 export function addConsultationFromAppointment(
-  c: Omit<LinkedConsultation, "id" | "appointmentId" | "clinicId">,
+  c: Omit<LinkedConsultation, "id" | "appointmentId" | "clinicId"> & { id?: string },
   appointmentId: string
 ) {
+  const finalId = asUUID(c.id || crypto.randomUUID());
+  const finalDate = toLocalDateStr(c.date);
+  const finalApptId = asUUID(appointmentId);
+  const clinicId = getCurrentClinicId();
   const consultation: LinkedConsultation = {
     ...c,
-    id: crypto.randomUUID(),
-    appointmentId,
-    clinicId: getCurrentClinicId(),
+    id: finalId,
+    date: finalDate,
+    appointmentId: finalApptId,
+    clinicId,
   };
-  setState((s) => ({
-    ...s,
-    consultations: [consultation, ...s.consultations],
-    appointments: s.appointments.map((a) =>
-      a.id === appointmentId ? { ...a, status: "Finalizada" as AppointmentStatus } : a
-    ),
-  }));
-  void Promise.resolve(db.from("consultations").insert({
-    id: consultation.id,
-    clinic_id: consultation.clinicId,
-    date: consultation.date,
-    vet_id: consultation.vetId,
-    pet_id: consultation.petId,
-    reason: consultation.reason,
-    weight: Number(consultation.weight),
-    temperature: Number(consultation.temperature),
-    diagnosis: consultation.diagnosis,
-    treatment: consultation.treatment,
-    medications: consultation.medications,
-    notes: consultation.notes,
-    appointment_id: consultation.appointmentId || null,
-  })).then(() => {}).catch((e) => console.error(e));
-  void Promise.resolve(db.from("appointments").update({ status: "Finalizada" }).eq("id", appointmentId)).then(() => {}).catch((e) => console.error(e));
+  saveLocalConsult(consultation);
+
+  setState((s) => {
+    const updated = s.appointments.map((a) =>
+      a.id === appointmentId || a.id === finalApptId ? { ...a, status: "Finalizada" as AppointmentStatus } : a
+    );
+    const target = updated.find((a) => a.id === appointmentId || a.id === finalApptId);
+    if (target) saveLocalAppt(target);
+    return {
+      ...s,
+      consultations: [consultation, ...s.consultations.filter((x) => x.id !== consultation.id)],
+      appointments: updated,
+    };
+  });
+
+  void Promise.resolve(
+    db.from("consultations").insert({
+      id: consultation.id,
+      clinic_id: consultation.clinicId,
+      date: consultation.date,
+      vet_id: consultation.vetId || null,
+      pet_id: consultation.petId ? asUUID(consultation.petId) : null,
+      reason: consultation.reason,
+      weight: Number(consultation.weight),
+      temperature: Number(consultation.temperature),
+      diagnosis: consultation.diagnosis,
+      treatment: consultation.treatment,
+      medications: consultation.medications,
+      notes: consultation.notes,
+      appointment_id: finalApptId,
+    })
+  ).then((res) => {
+    if (res?.error) console.error("[store] consultation insert error:", res.error);
+  }).catch((e) => console.error(e));
+
+  void Promise.resolve(
+    db.from("appointments").update({ status: "Finalizada" }).or(`id.eq.${finalApptId},id.eq.${appointmentId}`)
+  ).then(() => {}).catch((e) => console.error(e));
+
   return consultation;
 }
