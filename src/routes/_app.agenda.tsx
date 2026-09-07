@@ -611,8 +611,8 @@ function AgendaPage() {
                           {availableHours.length > 0 && (
                             <div className="pt-3">
                               <div className="text-xs font-medium text-muted-foreground mb-2">Horarios disponibles:</div>
-                              <div className="flex flex-wrap justify-center gap-2 max-w-md mx-auto">
-                                {availableHours.slice(0, 8).map((time) => (
+                              <div className="flex flex-wrap justify-center gap-2 max-w-xl mx-auto">
+                                {availableHours.map((time) => (
                                   <Button
                                     key={time}
                                     variant="outline"
