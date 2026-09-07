@@ -378,7 +378,7 @@ function EmailSettingsCard({ clinicId, clinicName, userEmail }: { clinicId: stri
           toEmail: testEmail.trim(),
           apiKey: config.resendApiKey.trim(),
           fromName: config.senderName.trim() || clinicName,
-          fromEmail: config.senderEmail.trim() || "onboarding@resend.dev",
+          fromEmail: config.senderEmail.trim() || "citas@go2vet.online",
         },
       });
 
@@ -474,10 +474,10 @@ function EmailSettingsCard({ clinicId, clinicName, userEmail }: { clinicId: stri
             <Input
               value={config.senderEmail}
               onChange={(e) => setConfig({ ...config, senderEmail: e.target.value })}
-              placeholder="onboarding@resend.dev"
+              placeholder="citas@go2vet.online"
             />
             <p className="text-[11px] text-muted-foreground">
-              Usa <code>onboarding@resend.dev</code> para pruebas, o tu correo/dominio verificado en Resend.
+              Dominio verificado activo: <strong className="text-foreground">citas@go2vet.online</strong> (permite envíos globales a Gmail, Hotmail, etc.)
             </p>
           </div>
         </div>

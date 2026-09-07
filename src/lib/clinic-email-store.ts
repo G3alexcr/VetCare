@@ -14,10 +14,14 @@ export function getClinicEmailConfig(clinicId: string): ClinicEmailConfig {
     const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${clinicId}`);
     if (raw) {
       const parsed = JSON.parse(raw);
+      let senderEmail = (parsed.senderEmail || "").trim();
+      if (!senderEmail || senderEmail.includes("resend.dev")) {
+        senderEmail = "citas@go2vet.online";
+      }
       return {
         resendApiKey: parsed.resendApiKey || "",
         senderName: parsed.senderName || "",
-        senderEmail: parsed.senderEmail || "citas@go2vet.online",
+        senderEmail,
       };
     }
   } catch (err) {

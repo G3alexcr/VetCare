@@ -55,7 +55,7 @@ export function ConsultationEmailDialog({
           ...currentEmailData,
           apiKey: emailCfg.resendApiKey,
           fromName: emailCfg.senderName,
-          fromEmail: emailCfg.senderEmail,
+          fromEmail: emailCfg.senderEmail || "citas@go2vet.online",
         },
       });
 

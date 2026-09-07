@@ -9,6 +9,14 @@ import {
 
 const resendApiKey = (customKey?: string) => customKey?.trim() || process.env["RESEND_API_KEY"];
 
+function getValidSenderEmail(customSender?: string): string {
+  const trimmed = customSender?.trim();
+  if (!trimmed || trimmed.includes("resend.dev")) {
+    return "citas@go2vet.online";
+  }
+  return trimmed;
+}
+
 export const sendConsultationEmailFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
@@ -53,7 +61,7 @@ export const sendConsultationEmailFn = createServerFn({ method: "POST" })
 
     try {
       const senderName = data.fromName?.trim() || data.clinicName || "VetCare";
-      const senderEmail = data.fromEmail?.trim() || "onboarding@resend.dev";
+      const senderEmail = getValidSenderEmail(data.fromEmail);
       const from = `${senderName} <${senderEmail}>`;
 
       const res = await fetch("https://api.resend.com/emails", {
@@ -136,7 +144,7 @@ export const sendAppointmentEmailFn = createServerFn({ method: "POST" })
 
     try {
       const senderName = data.fromName?.trim() || data.clinicName || "VetCare";
-      const senderEmail = data.fromEmail?.trim() || "onboarding@resend.dev";
+      const senderEmail = getValidSenderEmail(data.fromEmail);
       const from = `${senderName} <${senderEmail}>`;
 
       const res = await fetch("https://api.resend.com/emails", {
@@ -198,7 +206,7 @@ export const sendTestEmailFn = createServerFn({ method: "POST" })
     }
 
     const senderName = data.fromName?.trim() || "VetCare";
-    const senderEmail = data.fromEmail?.trim() || "onboarding@resend.dev";
+    const senderEmail = getValidSenderEmail(data.fromEmail);
     const from = `${senderName} <${senderEmail}>`;
 
     try {
