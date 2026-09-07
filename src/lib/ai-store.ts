@@ -21,6 +21,10 @@ export type AiSettings = {
   temperature: number;
   maxTokens: number;
   language: "es" | "en";
+  // TTS (Text-to-Speech) — Fish Audio
+  fishApiKey?: string;
+  fishVoiceId?: string;
+  autoSpeak?: boolean; // false = manual 🔊 button; true = auto-play every AI response
 };
 
 export type AiHistoryEntry = {
@@ -41,6 +45,9 @@ const defaultSettings: AiSettings = {
   temperature: 0.3,
   maxTokens: 2048,
   language: "es",
+  fishApiKey: "",
+  fishVoiceId: "",
+  autoSpeak: false,
 };
 
 // Sin localStorage: los ajustes e historial de la IA se mantienen en memoria
@@ -122,6 +129,9 @@ export async function saveClinicAiSettings(
   if (patch.apiKey !== undefined) updateData.ai_api_key = patch.apiKey;
   if (patch.model) updateData.ai_model = patch.model;
   if (patch.emergencyPhone !== undefined) updateData.emergency_phone = patch.emergencyPhone;
+  if (patch.fishApiKey !== undefined) updateData.fish_audio_api_key = patch.fishApiKey;
+  if (patch.fishVoiceId !== undefined) updateData.fish_audio_voice_id = patch.fishVoiceId;
+  if (patch.autoSpeak !== undefined) updateData.ai_auto_speak = patch.autoSpeak;
   try {
     await db.from("clinics").update(updateData).eq("id", clinicId);
   } catch (err) {

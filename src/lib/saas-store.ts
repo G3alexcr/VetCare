@@ -26,6 +26,10 @@ export type Clinic = {
   aiApiKey?: string;
   aiModel?: string;
   emergencyPhone?: string;
+  // Fish Audio TTS
+  fishAudioApiKey?: string;
+  fishAudioVoiceId?: string;
+  aiAutoSpeak?: boolean;
   // extended settings
   openingHours: string;
   specialties: string[];
@@ -175,6 +179,9 @@ function mapClinic(r: DbRow): Clinic {
         : "gpt-4o-mini"
     ),
     emergencyPhone: String(r.emergency_phone ?? "+506 2222-9999"),
+    fishAudioApiKey: String(r.fish_audio_api_key ?? ""),
+    fishAudioVoiceId: String(r.fish_audio_voice_id ?? ""),
+    aiAutoSpeak: Boolean(r.ai_auto_speak ?? false),
     openingHours: String(r.opening_hours ?? ""),
     specialties: Array.isArray(r.specialties) ? (r.specialties as string[]) : [],
     socials: (r.socials as Clinic["socials"]) ?? {},

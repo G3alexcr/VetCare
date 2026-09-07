@@ -356,6 +356,89 @@ function ToolHeading({ title, desc }: { title: string; desc: string }) {
   );
 }
 
+// -------- Hook TTS híbrido: Fish Audio → fallback navegador --------
+
+function useTTS() {
+  const settings = useAiSettings();
+  const clinics = useClinics();
+  const currentClinicId = useCurrentClinicId();
+  const currentClinic = clinics.find((c) => c.id === currentClinicId);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+
+  const stop = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeaking(false);
+  };
+
+  const speak = async (text: string) => {
+    stop();
+    setSpeaking(true);
+
+    const clean = text
+      .replace(/#{1,6}\s/g, "")
+      .replace(/\*\*/g, "")
+      .replace(/\*/g, "")
+      .replace(/`{1,3}/g, "")
+      .replace(/>\s/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\n{2,}/g, ". ")
+      .replace(/\n/g, " ")
+      .trim()
+      .slice(0, 3000);
+
+    const fishKey = settings.fishApiKey || currentClinic?.fishAudioApiKey || "";
+    const fishVoice = settings.fishVoiceId || currentClinic?.fishAudioVoiceId || "";
+
+    if (fishKey) {
+      try {
+        const { runFishAudioTTS } = await import("@/lib/tts.functions");
+        const res = await runFishAudioTTS({ data: { text: clean, apiKey: fishKey, voiceId: fishVoice || undefined } });
+        const audio = new Audio(res.audioDataUrl);
+        audioRef.current = audio;
+        audio.onended = () => setSpeaking(false);
+        audio.onerror = () => {
+          setSpeaking(false);
+          browserSpeak(clean);
+        };
+        audio.play();
+        return;
+      } catch (err) {
+        console.warn("Fish Audio falló, usando voz del navegador:", err);
+      }
+    }
+
+    browserSpeak(clean);
+  };
+
+  const browserSpeak = (text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      setSpeaking(false);
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "es-ES";
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find((v) => v.lang.startsWith("es") && v.localService) || voices.find((v) => v.lang.startsWith("es"));
+    if (esVoice) utter.voice = esVoice;
+    utter.onend = () => setSpeaking(false);
+    utter.onerror = () => setSpeaking(false);
+    utteranceRef.current = utter;
+    window.speechSynthesis.speak(utter);
+  };
+
+  return { speak, stop, speaking };
+}
+
 // ---------------- Herramientas ----------------
 
 function useSpeechDictation(onTranscript: (chunk: string) => void) {
@@ -412,11 +495,14 @@ function ChatTool() {
   const panel = useAiPanel();
   const buildContext = useClinicalContext();
   const { loading, run } = useAiRunner();
+  const settings = useAiSettings();
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const petId = panel.petId ?? "";
   const products = useProducts();
+  const { speak, stop, speaking } = useTTS();
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
 
   const { listening, toggle: toggleDictation } = useSpeechDictation((transcribed) => {
     setInput((prev) => (prev ? `${prev} ${transcribed}` : transcribed));
@@ -426,26 +512,34 @@ function ChatTool() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const handleSpeak = (text: string, idx: number) => {
+    if (speaking && speakingIdx === idx) {
+      stop();
+      setSpeakingIdx(null);
+    } else {
+      setSpeakingIdx(idx);
+      speak(text);
+    }
+  };
+
   const handleCommand = (cmd: string) => {
     if (cmd === "/inventario") {
       const lowStock = products.filter((p) => Number(p.stock) <= Number(p.minStock));
-      let report = `### 📦 Reporte de Inventario Crítico & Vacunas\n\n`;
-      if (lowStock.length === 0) {
-        report += `✅ Todos los medicamentos y vacunas cuentan con stock por encima del nivel mínimo establecido. Total productos: ${products.length}.`;
-      } else {
-        report += `⚠️ **${lowStock.length} productos con existencias en nivel crítico o agotados:**\n\n`;
-        report += `| Medicamento / Producto | Stock Actual | Mínimo | Estado |\n|---|---|---|---|\n`;
-        for (const p of lowStock) {
-          const status = Number(p.stock) <= 0 ? "🔴 AGOTADO" : "🟡 CRÍTICO";
-          report += `| ${p.name} | **${p.stock}** | ${p.minStock} | ${status} |\n`;
-        }
-        report += `\n*Se recomienda generar orden de compra a proveedores veterinarios.*`;
+      if (!lowStock.length) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            text: "✅ **Inventario saludable**: Todos los medicamentos y vacunas están por encima del stock mínimo.",
+          },
+        ]);
+        return;
       }
-      setMessages((m) => [
-        ...m,
-        { role: "user", text: "/inventario" },
-        { role: "assistant", text: report },
-      ]);
+      const rows = lowStock
+        .map((p) => `| ${p.name} | ${p.stock} | ${p.minStock} | ${p.category || "—"} |`)
+        .join("\n");
+      const table = `## ⚠️ Medicamentos y vacunas por agotarse\n\n| Producto | Stock actual | Stock mínimo | Categoría |\n|---|---|---|---|\n${rows}`;
+      setMessages((m) => [...m, { role: "assistant", text: table }]);
       return;
     }
 
@@ -489,20 +583,26 @@ function ChatTool() {
       prompt: `Conversación:\n${transcript}${context}\n\nResponde la última pregunta del personal.`,
       petId: petId || undefined,
     });
-    if (answer) setMessages((m) => [...m, { role: "assistant", text: answer }]);
+    if (answer) {
+      setMessages((m) => [...m, { role: "assistant", text: answer }]);
+      if (settings.autoSpeak) {
+        const idx = messages.length + 1;
+        setSpeakingIdx(idx);
+        speak(answer);
+      }
+    }
   };
 
   return (
     <div className="flex flex-col h-full">
       <ToolHeading
         title="Copiloto Clínico & Buscador"
-        desc="Dicta notas por voz, ejecuta comandos rápidos o consulta el expediente."
+        desc="Habla con el micrófono, escribe en el campo de texto o usa los comandos rápidos — siempre ambas opciones disponibles."
       />
       <div className="mb-2 max-w-xs">
         <PetPicker value={petId} onChange={(v) => setAiPanelPet(v)} />
       </div>
 
-      {/* Chips de Comandos Rápidos */}
       <div className="flex flex-wrap gap-1.5 mb-2.5">
         <button
           onClick={() => handleCommand("/receta")}
@@ -536,24 +636,39 @@ function ChatTool() {
             <div className="font-bold text-foreground flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-teal-600" /> Copiloto Médico Activo:
             </div>
-            <div>• Toca el <b>micrófono</b> para dictar hallazgos de consulta en tiempo real.</div>
-            <div>• Escribe o toca <b>/inventario</b> para ver medicamentos y vacunas por agotarse.</div>
-            <div>• Escribe <b>/receta</b> o <b>/diagnostico</b> para redactar pautas farmacológicas.</div>
+            <div>• 🎙️ Usa el <b>micrófono</b> para dictar hallazgos mientras examinas al paciente.</div>
+            <div>• ⌨️ O <b>escribe directamente</b> en el campo de texto — siempre disponible ambas opciones.</div>
+            <div>• 🔊 Cada respuesta tiene un botón para <b>escucharla en voz alta</b>.</div>
+            <div>• Toca <b>/inventario</b> para ver medicamentos por agotarse.</div>
           </div>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed ${
-                m.role === "user" ? "bg-teal-600 text-white rounded-br-xs" : "bg-muted text-foreground rounded-bl-xs shadow-2xs border"
-              }`}
-            >
+            <div className={`group relative max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed ${
+              m.role === "user"
+                ? "bg-teal-600 text-white rounded-br-xs"
+                : "bg-muted text-foreground rounded-bl-xs shadow-2xs border"
+            }`}>
               {m.role === "user" ? (
                 m.text
               ) : (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown>{m.text}</ReactMarkdown>
-                </div>
+                <>
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <ReactMarkdown>{m.text}</ReactMarkdown>
+                  </div>
+                  <button
+                    onClick={() => handleSpeak(m.text, i)}
+                    title={speaking && speakingIdx === i ? "Detener lectura" : "Escuchar respuesta"}
+                    className={`mt-2 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+                      speaking && speakingIdx === i
+                        ? "bg-red-100 dark:bg-red-950/40 text-red-700 border-red-300 animate-pulse"
+                        : "bg-background text-muted-foreground border-border hover:text-teal-600 hover:border-teal-300"
+                    }`}
+                  >
+                    <Volume2 className="w-3 h-3" />
+                    {speaking && speakingIdx === i ? "Detener" : "Escuchar"}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -566,31 +681,41 @@ function ChatTool() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Compositor con Dictado por Voz */}
-      <div className="flex gap-2 mt-3 items-center">
-        <Button
-          type="button"
-          size="icon"
-          variant={listening ? "destructive" : "outline"}
-          onClick={toggleDictation}
-          title={listening ? "Detener dictado" : "Dictar por voz"}
-          className={`h-10 w-10 shrink-0 rounded-xl transition-all ${
-            listening ? "animate-pulse ring-2 ring-red-500" : ""
-          }`}
-        >
-          {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-teal-600" />}
-        </Button>
-        <Input
-          placeholder={listening ? "Escuchando tu voz en tiempo real..." : "Escribe o usa /receta, /inventario…"}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          disabled={loading}
-          className="rounded-xl"
-        />
-        <Button size="icon" onClick={send} disabled={loading || !input.trim()} className="rounded-xl bg-teal-600 hover:bg-teal-700 text-white shrink-0">
-          <Send className="h-4 w-4" />
-        </Button>
+      <div className="mt-3 space-y-2">
+        {listening && (
+          <div className="flex items-center gap-2 text-xs text-red-600 font-medium bg-red-50 dark:bg-red-950/30 rounded-xl px-3 py-1.5 border border-red-200 dark:border-red-800">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+            Escuchando tu voz en tiempo real — lo que digas aparecerá en el campo de texto abajo
+          </div>
+        )}
+        <div className="flex gap-2 items-center">
+          <Button
+            type="button"
+            size="icon"
+            variant={listening ? "destructive" : "outline"}
+            onClick={toggleDictation}
+            title={listening ? "Detener dictado de voz" : "Dictar por voz (el texto aparece abajo)"}
+            className={`h-10 w-10 shrink-0 rounded-xl transition-all ${listening ? "animate-pulse ring-2 ring-red-500" : ""}`}
+          >
+            {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-teal-600" />}
+          </Button>
+          <Input
+            placeholder="Escribe aquí o dicta con el micrófono (ambas opciones siempre disponibles)…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+            disabled={loading}
+            className="rounded-xl flex-1"
+          />
+          <Button
+            size="icon"
+            onClick={send}
+            disabled={loading || !input.trim()}
+            className="rounded-xl bg-teal-600 hover:bg-teal-700 text-white shrink-0"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       {messages.length > 0 && <div className="text-[11px] text-muted-foreground mt-2">{DISCLAIMER}</div>}
     </div>
@@ -1026,6 +1151,9 @@ function ConfigTool() {
         provider: (currentClinic.aiProvider as AiProvider) || prev.provider || "openai",
         apiKey: currentClinic.aiApiKey || prev.apiKey || "",
         model: cleanModel,
+        fishApiKey: currentClinic.fishAudioApiKey || prev.fishApiKey || "",
+        fishVoiceId: currentClinic.fishAudioVoiceId || prev.fishVoiceId || "",
+        autoSpeak: currentClinic.aiAutoSpeak ?? prev.autoSpeak ?? false,
       }));
       if (currentClinic.emergencyPhone) {
         setEmergencyPhone(currentClinic.emergencyPhone);
@@ -1045,9 +1173,12 @@ function ConfigTool() {
           apiKey: form.apiKey,
           model: form.model,
           emergencyPhone: emergencyPhone.trim(),
+          fishApiKey: form.fishApiKey,
+          fishVoiceId: form.fishVoiceId,
+          autoSpeak: form.autoSpeak,
         });
       }
-      toast.success("Configuración de IA y Urgencias guardada con éxito en Supabase");
+      toast.success("Configuración de IA, Voz y Urgencias guardada en Supabase");
     } catch (err: any) {
       toast.error("Error al guardar: " + (err.message || err));
     } finally {
@@ -1216,6 +1347,81 @@ function ConfigTool() {
           <p className="text-[11px] text-muted-foreground">
             Si el triaje automático del dueño de mascota detecta signos de riesgo vital o emergencia roja, mostrará de inmediato un botón para llamar a este número.
           </p>
+        </div>
+
+        {/* ── Sección Fish Audio TTS ── */}
+        <div className="space-y-3 pt-3 border-t">
+          <div>
+            <Label className="font-semibold flex items-center gap-1.5">
+              🔊 Voz de IA — Fish Audio TTS
+            </Label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Cada respuesta de la IA tendrá un botón 🔊 <b>Escuchar</b>. Con Fish Audio obtienes voz hiperrealista en español por tu propia cuenta.
+              Sin clave, la IA habla usando la voz gratuita del navegador como respaldo automático.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>API Key de Fish Audio</Label>
+              <a href="https://fish.audio" target="_blank" rel="noopener noreferrer" className="text-[10px] text-teal-600 hover:underline">
+                Obtener clave en fish.audio →
+              </a>
+            </div>
+            <div className="relative">
+              <Input
+                type={showKey ? "text" : "password"}
+                placeholder="Empieza con tu clave de Fish Audio..."
+                value={form.fishApiKey || ""}
+                onChange={(e) => setForm({ ...form, fishApiKey: e.target.value })}
+                className="pr-10 font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Guardada por clínica en Supabase. Sin clave → voz del navegador (gratis, siempre disponible).
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>ID de Voz (Voice ID) — opcional</Label>
+            <Input
+              placeholder="Deja vacío para voz predeterminada, o pega el ID de tu voz clonada"
+              value={form.fishVoiceId || ""}
+              onChange={(e) => setForm({ ...form, fishVoiceId: e.target.value })}
+              className="font-mono text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              En <a href="https://fish.audio" target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline">fish.audio</a> puedes clonar la voz de tu clínica en 10 segundos.
+              El ID lo encuentras en la URL de tu voz creada.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border px-4 py-3 bg-muted/20">
+            <div>
+              <Label className="font-medium">Lectura automática</Label>
+              <p className="text-[11px] text-muted-foreground">
+                La IA leerá en voz alta cada respuesta automáticamente sin tocar el botón 🔊.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, autoSpeak: !form.autoSpeak })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                form.autoSpeak ? "bg-teal-600" : "bg-muted border"
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                form.autoSpeak ? "translate-x-6" : "translate-x-1"
+              }`} />
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 pt-2 border-t">
