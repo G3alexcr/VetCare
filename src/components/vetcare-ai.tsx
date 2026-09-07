@@ -1179,6 +1179,7 @@ function ConfigTool() {
         });
       }
       toast.success("Configuración de IA, Voz y Urgencias guardada en Supabase");
+      setAiPanelTool("chat");
     } catch (err: any) {
       toast.error("Error al guardar: " + (err.message || err));
     } finally {
