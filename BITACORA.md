@@ -5,6 +5,43 @@
 
 ---
 
+## 📅 [2026-09-07 05:30] — Dictado Clínico IA, Edición de Consultas, TTS Fish Audio Latino y Asistente Manos Libres
+
+### 📝 Incidencia / Requerimiento
+1. **Audio exclusivo con Fish Audio**: Eliminar OpenAI para la síntesis de voz (TTS) y utilizar la cuenta de Fish Audio de la clínica.
+2. **Dictado por voz en atención médica**: El veterinario requería dictar la consulta en vivo (desde Agenda o Historial de Consultas) y que la IA auto-rellene de forma estructurada los campos médicos (motivo, examen físico, hallazgos, diagnóstico, tratamiento, etc.).
+3. **Edición de consultas**: No existía una opción visible para editar o rectificar consultas ya guardadas en la historia clínica.
+4. **Calidad de voz y acento latino**: La voz original de Fish Audio sonaba robótica/extraña por no tener asignada una voz latina natural por defecto.
+5. **Conciencia de la base de datos de la clínica**: Al preguntarle a la IA cuántas mascotas habían registradas, respondía que no tenía acceso a la información. El asistente debe conocer todo lo que hay en la base de datos viva (pacientes, clientes, citas de hoy, inventario bajo, consultas).
+6. **Experiencia conversacional manos libres (estilo Alexa / Google Assistant)**: El usuario no quería tener que presionar el botón de enviar tras hablar por micrófono; requería que al terminar de hablar, la IA envíe sola la pregunta y responda en voz alta.
+
+### ✅ Lo que está bien / funcionando
+- **Dictado clínico en formulario de consulta**: Micrófono interactivo con botón *"✨ Procesar con IA y autollenar"* conectado a `structureConsultationVoice()`.
+- **Edición completa de consultas**: Botón `[✏️ Editar Consulta]` disponible tanto en el historial de consultas como en citas finalizadas de la Agenda.
+- **Fish Audio TTS Exclusivo**: Modelo `s2.1-pro-free` con voz predeterminada **Verity (Español Latino)** (`655e3fff79c7463dbf70e2ed5c4bd5d3`), eliminando cualquier llamada a OpenAI para audio.
+- **Selector de voces latinas en Configuración**: Dropdown con voces Verity, Natasha, Jarvis, Médico, soporte para IDs clonados y botón de prueba en vivo (`🔊 Probar voz`).
+- **Contexto de base de datos en tiempo real**: Hook `useGlobalClinicContext()` inyecta conteo exacto de mascotas (con nombres, especies y dueños), clientes, agenda del día, productos con stock bajo y equipo veterinario.
+- **Modo manos libres con detección de silencio**: Al hablar por el micrófono, un detector de pausas (1.6s) detiene la escucha y envía la consulta automáticamente, reproduciendo la respuesta por voz sin necesidad de tocar el teclado ni el botón Enviar.
+
+### ⚠️ Lo que se tuvo que corregir
+1. `runVoiceTTS` recurría a OpenAI TTS: se refactorizó `tts.functions.ts` para que opere única y exclusivamente con la API de Fish Audio (`s2.1-pro-free`).
+2. Ausencia de contexto global en `ChatTool`: solo inyectaba datos si había una mascota individual seleccionada; se resolvió construyendo un resumen integral de toda la clínica.
+3. Envío manual en entrada de voz: se añadió el temporizador de inactividad fonética y el parámetro `textOverride` en `send()` para disparo automático.
+
+### 🔧 Archivos modificados
+| Archivo | Cambio |
+|---|---|
+| `src/lib/tts.functions.ts` | Eliminación de OpenAI TTS, implementación exclusiva de Fish Audio con fallback predeterminado a voz latina. |
+| `src/lib/ai.functions.ts` | Creación de `structureConsultationVoice()` con schema tipado Zod para autollenar consultas médicas. |
+| `src/components/consultation-form.tsx` | Integración de micrófono, reconocimiento de voz, pre-carga de campos para edición y botón de estructuración IA. |
+| `src/components/consultation-detail.tsx` | Modo edición con botón `[✏️ Editar Consulta]` conectado al formulario y `updateConsultation()`. |
+| `src/routes/_app.agenda.tsx` | Botón para editar consulta en citas terminadas y enlace a `ConsultationDetailDialog`. |
+| `src/routes/_app.consultas.tsx` | Botón de edición en tarjetas de historial médico de mascotas. |
+| `src/components/vetcare-ai.tsx` | Inyección de `useGlobalClinicContext()`, selector de voces latinas, botón de prueba y auto-envío por silencio. |
+| `src/lib/ai-store.ts` y `saas-store.ts` | Configuración y persistencia en Supabase de la voz latina predeterminada y ajustes de audio. |
+
+---
+
 ## 📅 [2026-09-07 03:34] — Sistema de Correos Automáticos Resend + Mejoras UI Cobros
 
 ### 📝 Incidencia / Requerimiento
