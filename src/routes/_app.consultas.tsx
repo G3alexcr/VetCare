@@ -46,6 +46,9 @@ import { PayConsultationDialog, type PayConsultationData } from "@/components/pa
 import { Mail } from "lucide-react";
 import { ConsultationEmailDialog } from "@/components/consultation-email-dialog";
 import type { ConsultationEmailData } from "@/lib/email-templates";
+import { useCurrentClinicId } from "@/lib/saas-store";
+import { getClinicEmailConfig } from "@/lib/clinic-email-store";
+import { sendConsultationEmailFn } from "@/lib/email.functions";
 
 export const Route = createFileRoute("/_app/consultas")({
   head: () => ({ meta: [{ title: "Consultas y Atención Médica — VetCare" }] }),
@@ -65,6 +68,7 @@ const statusBadgeStyles: Record<string, string> = {
 };
 
 function ConsultationsPage() {
+  const clinicId = useCurrentClinicId();
   const consultations = useConsultations();
   const appointments = useAppointments();
   const pets = usePets();
@@ -167,6 +171,39 @@ function ConsultationsPage() {
                   const pet = pets.find((p) => p.id === data.petId);
                   const client = clientes.find((cl) => cl.id === (data.clientId || pet?.clientId));
                   const vet = vets.find((v) => v.id === data.vetId);
+
+                  // Despacho 100% automático en segundo plano al correo del tutor
+                  const clientEmail = client?.email?.trim();
+                  if (clientEmail && clientEmail.includes("@")) {
+                    const emailCfg = getClinicEmailConfig(clinicId);
+                    sendConsultationEmailFn({
+                      data: {
+                        clientName: client?.fullName || "Tutor",
+                        clientEmail,
+                        petName: pet?.name || "Mascota",
+                        petSpecies: pet?.species,
+                        petBreed: pet?.breed,
+                        vetName: vet?.nombre,
+                        date: data.date,
+                        diagnosis: data.diagnosis || data.reason,
+                        treatment: data.treatment || "Seguir indicaciones médicas",
+                        medications: data.medications,
+                        weight: data.weight,
+                        temperature: data.temperature,
+                        notes: data.notes,
+                        apiKey: emailCfg.resendApiKey,
+                        fromName: emailCfg.senderName,
+                        fromEmail: emailCfg.senderEmail || "citas@go2vet.online",
+                      },
+                    })
+                      .then((res) => {
+                        if (res.success && !res.mocked) {
+                          toast.success(`✓ Resumen clínico enviado a ${clientEmail}`);
+                        }
+                      })
+                      .catch((err) => console.error("Error enviando correo de consulta:", err));
+                  }
+
                   setPayData({
                     clientName: client?.fullName || "Cliente general",
                     clientId: client?.id,
@@ -527,6 +564,38 @@ function ConsultationsPage() {
                 const pet = pets.find((p) => p.id === appt.petId);
                 const client = clientes.find((cl) => cl.id === (appt.clientId || pet?.clientId));
                 const vet = vets.find((v) => v.id === appt.vetId);
+
+                // Despacho 100% automático en segundo plano al correo del tutor
+                const clientEmail = client?.email?.trim();
+                if (clientEmail && clientEmail.includes("@")) {
+                  const emailCfg = getClinicEmailConfig(clinicId);
+                  sendConsultationEmailFn({
+                    data: {
+                      clientName: client?.fullName || "Tutor",
+                      clientEmail,
+                      petName: pet?.name || "Mascota",
+                      petSpecies: pet?.species,
+                      petBreed: pet?.breed,
+                      vetName: vet?.nombre,
+                      date: data.date,
+                      diagnosis: data.diagnosis || data.reason,
+                      treatment: data.treatment || "Seguir indicaciones médicas",
+                      medications: data.medications,
+                      weight: data.weight,
+                      temperature: data.temperature,
+                      notes: data.notes,
+                      apiKey: emailCfg.resendApiKey,
+                      fromName: emailCfg.senderName,
+                      fromEmail: emailCfg.senderEmail || "citas@go2vet.online",
+                    },
+                  })
+                    .then((res) => {
+                      if (res.success && !res.mocked) {
+                        toast.success(`✓ Resumen clínico enviado a ${clientEmail}`);
+                      }
+                    })
+                    .catch((err) => console.error("Error enviando correo de consulta:", err));
+                }
 
                 // Prompt to bill the consultation
                 setPayData({

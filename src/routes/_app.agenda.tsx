@@ -56,6 +56,9 @@ import { toast } from "sonner";
 import { Receipt, Mail } from "lucide-react";
 import { AppointmentEmailDialog } from "@/components/appointment-email-dialog";
 import type { AppointmentEmailData } from "@/lib/email-templates";
+import { useCurrentClinicId } from "@/lib/saas-store";
+import { getClinicEmailConfig } from "@/lib/clinic-email-store";
+import { sendAppointmentEmailFn } from "@/lib/email.functions";
 
 export const Route = createFileRoute("/_app/agenda")({
   head: () => ({ meta: [{ title: "Agenda — Go2Vet" }] }),
@@ -83,6 +86,7 @@ const statuses: AppointmentStatus[] = [
 ];
 
 function AgendaPage() {
+  const clinicId = useCurrentClinicId();
   const appointments = useAppointments();
   const clientes = useClientes();
   const pets = usePets();
@@ -253,18 +257,33 @@ function AgendaPage() {
     setOpen(false);
     toast.success("Cita programada con éxito");
 
-    // Prompt to send appointment confirmation email
-    setEmailAppointmentData({
-      clientName: chosenClient?.fullName || chosenClient?.name || "Tutor",
-      clientEmail: chosenClient?.email || "",
-      petName: chosenPet?.name || "Mascota",
-      petSpecies: chosenPet?.species,
-      petBreed: chosenPet?.breed,
-      vetName: chosenVet?.nombre,
-      date: d.date,
-      time: d.time,
-      reason: d.reason,
-    });
+    // Despacho 100% automático en segundo plano al correo del cliente
+    const clientEmail = chosenClient?.email?.trim();
+    if (clientEmail && clientEmail.includes("@")) {
+      const emailCfg = getClinicEmailConfig(clinicId);
+      sendAppointmentEmailFn({
+        data: {
+          clientName: chosenClient?.fullName || chosenClient?.name || "Tutor",
+          clientEmail,
+          petName: chosenPet?.name || "Mascota",
+          petSpecies: chosenPet?.species,
+          petBreed: chosenPet?.breed,
+          vetName: chosenVet?.nombre,
+          date: d.date,
+          time: d.time,
+          reason: d.reason,
+          apiKey: emailCfg.resendApiKey,
+          fromName: emailCfg.senderName,
+          fromEmail: emailCfg.senderEmail || "citas@go2vet.online",
+        },
+      })
+        .then((res) => {
+          if (res.success && !res.mocked) {
+            toast.success(`✓ Confirmación enviada automáticamente a ${clientEmail}`);
+          }
+        })
+        .catch((err) => console.error("Error enviando correo de cita:", err));
+    }
   };
 
   // Mini calendar days calculation
