@@ -23,7 +23,7 @@ import { CURRENCIES, formatMoney, setCurrency, useCurrency, type Currency } from
 import { useStorageUsage, formatBytes } from "@/lib/storage";
 import {
   Building2, Users, Package, TrendingUp, HardDrive, PawPrint, Plus, Edit, Trash2, Instagram, Facebook, Globe, Coins, Rocket,
-  Mail, KeyRound, ExternalLink, CheckCircle2, AlertTriangle, Send, ShieldCheck,
+  Mail, KeyRound, ExternalLink, CheckCircle2, AlertTriangle, Send, ShieldCheck, Eye, EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicEmailConfig, saveClinicEmailConfig, type ClinicEmailConfig } from "@/lib/clinic-email-store";
@@ -350,7 +350,8 @@ function CurrencyCard() {
 
 function EmailSettingsCard({ clinicId, clinicName, userEmail }: { clinicId: string; clinicName: string; userEmail: string }) {
   const [config, setConfig] = useState<ClinicEmailConfig>(() => getClinicEmailConfig(clinicId));
-  const [testEmail, setTestEmail] = useState(userEmail || "alxndrgm@gmail.com");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testEmail, setTestEmail] = useState(userEmail && !userEmail.includes("example") ? userEmail : "alxndrgm@gmail.com");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
 
@@ -430,13 +431,25 @@ function EmailSettingsCard({ clinicId, clinicName, userEmail }: { clinicId: stri
             <Label className="flex items-center gap-1.5 text-sm font-semibold">
               <KeyRound className="h-4 w-4 text-primary" /> Resend API Key (re_...)
             </Label>
-            <Input
-              type="password"
-              value={config.resendApiKey}
-              onChange={(e) => setConfig({ ...config, resendApiKey: e.target.value })}
-              placeholder="re_123456789_abcdefghijklmnopqrstuvwxyz"
-              className="font-mono text-sm"
-            />
+            <div className="relative">
+              <Input
+                type={showApiKey ? "text" : "password"}
+                value={config.resendApiKey}
+                onChange={(e) => setConfig({ ...config, resendApiKey: e.target.value })}
+                placeholder="re_123456789_abcdefghijklmnopqrstuvwxyz"
+                className="font-mono text-sm pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1 h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowApiKey(!showApiKey)}
+                title={showApiKey ? "Ocultar clave" : "Mostrar clave"}
+              >
+                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
             <p className="text-[11px] text-muted-foreground">
               Obtén tu clave gratis (3,000 correos/mes) registrándote en{" "}
               <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-primary underline font-medium inline-flex items-center gap-0.5">
