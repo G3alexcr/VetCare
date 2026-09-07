@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, CalendarClock, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, CalendarClock, AlertTriangle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   deleteAppointment,
+  STANDARD_HOURS,
 } from "@/lib/store";
 import {
   type Appointment,
@@ -76,11 +77,42 @@ export function AppointmentsTab({ petId }: { petId: string }) {
   const [viewing, setViewing] = useState<Appointment | null>(null);
   const [confirmDel, setConfirmDel] = useState<Appointment | null>(null);
 
+  const [formDate, setFormDate] = useState<string>(today());
+  const [formTime, setFormTime] = useState<string>("09:00");
+  const [formVetId, setFormVetId] = useState<string>(vets[0]?.id ?? "");
+
   const pet = pets.find((p) => p.id === petId);
   const defaultClientId = pet?.clientId ?? clientes[0]?.id ?? "";
 
-  const openNew = () => { setEditing(null); setFormOpen(true); };
-  const openEdit = (a: Appointment) => { setEditing(a); setFormOpen(true); setViewing(null); };
+  const openNew = () => {
+    setEditing(null);
+    setFormDate(today());
+    setFormTime("09:00");
+    setFormVetId(vets[0]?.id ?? "");
+    setFormOpen(true);
+  };
+  const openEdit = (a: Appointment) => {
+    setEditing(a);
+    setFormDate(a.date);
+    setFormTime(a.time);
+    setFormVetId(a.vetId);
+    setFormOpen(true);
+    setViewing(null);
+  };
+
+  const bookedHours = useMemo(() => {
+    return new Set(
+      all
+        .filter(
+          (a) =>
+            a.date === formDate &&
+            (!formVetId || a.vetId === formVetId) &&
+            a.status !== "Cancelada" &&
+            (!editing || a.id !== editing.id)
+        )
+        .map((a) => a.time)
+    );
+  }, [all, formDate, formVetId, editing]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -88,25 +120,25 @@ export function AppointmentsTab({ petId }: { petId: string }) {
     const d = Object.fromEntries(fd.entries()) as Record<string, string>;
     if (editing) {
       updateAppointment(editing.id, {
-        date: toLocalDateStr(d.date),
-        time: d.time,
-        vetId: d.vetId,
+        date: toLocalDateStr(formDate || d.date),
+        time: formTime || d.time,
+        vetId: formVetId || d.vetId,
         reason: d.reason,
         status: d.status as AppointmentStatus,
       });
-      toast.success("Cita actualizada");
+      toast.success("Cita actualizada exitosamente");
     } else {
       addAppointment({
         id: crypto.randomUUID(),
-        date: toLocalDateStr(d.date),
-        time: d.time,
+        date: toLocalDateStr(formDate || d.date),
+        time: formTime || d.time,
         clientId: defaultClientId,
         petId,
-        vetId: d.vetId,
+        vetId: formVetId || d.vetId,
         reason: d.reason,
         status: "Pendiente",
       });
-      toast.success("Cita agendada");
+      toast.success("Cita agendada exitosamente");
     }
     setFormOpen(false);
   };
@@ -198,26 +230,81 @@ export function AppointmentsTab({ petId }: { petId: string }) {
             <DialogTitle>{editing ? "Reprogramar / editar cita" : "Agendar cita"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label>Fecha</Label>
-              <Input type="date" name="date" required defaultValue={editing?.date ?? today()} />
+              <Input
+                type="date"
+                name="date"
+                required
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+              />
             </div>
-            <div className="space-y-2">
-              <Label>Hora</Label>
-              <Input type="time" name="time" required defaultValue={editing?.time ?? "09:00"} />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Hora</Label>
+                <span className={`text-[11px] font-semibold ${bookedHours.has(formTime) ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {bookedHours.has(formTime) ? "⚠️ Horario ocupado" : "✓ Horario disponible"}
+                </span>
+              </div>
+              <Input
+                type="time"
+                name="time"
+                required
+                value={formTime}
+                onChange={(e) => setFormTime(e.target.value)}
+              />
             </div>
-            <div className="col-span-2 space-y-2">
+
+            {/* Selector rápido de horas disponibles */}
+            <div className="col-span-2 space-y-2 p-3 rounded-xl border bg-slate-50/80 dark:bg-slate-900/40">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
+                  Horarios disponibles ({formDate}):
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {STANDARD_HOURS.length - bookedHours.size} libres · {bookedHours.size} ocupados
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {STANDARD_HOURS.map((hour) => {
+                  const isBooked = bookedHours.has(hour);
+                  const isSelected = formTime === hour;
+                  return (
+                    <button
+                      type="button"
+                      key={hour}
+                      disabled={isBooked}
+                      onClick={() => setFormTime(hour)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400 font-bold"
+                          : isBooked
+                          ? "bg-slate-200/80 dark:bg-slate-800 text-slate-400 dark:text-slate-600 line-through cursor-not-allowed opacity-60"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 cursor-pointer shadow-2xs"
+                      }`}
+                      title={isBooked ? `Horario ${hour} ya ocupado` : `Seleccionar ${hour}`}
+                    >
+                      {hour}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="col-span-2 space-y-1.5">
               <Label>Veterinario</Label>
-              <Select name="vetId" defaultValue={editing?.vetId ?? vets[0]?.id ?? ""}>
+              <Select name="vetId" value={formVetId} onValueChange={setFormVetId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {vets.map((v) => <SelectItem key={v.id} value={v.id}>{v.nombre}</SelectItem>)}
+                  {vets.map((v) => <SelectItem key={v.id} value={v.id}>{v.nombre} ({v.especialidad})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="col-span-2 space-y-2">
+            <div className="col-span-2 space-y-1.5">
               <Label>Motivo</Label>
-              <Input name="reason" required defaultValue={editing?.reason} />
+              <Input name="reason" required defaultValue={editing?.reason} placeholder="Ej. Control general, vacunación..." />
             </div>
             {editing && (
               <div className="col-span-2 space-y-2">

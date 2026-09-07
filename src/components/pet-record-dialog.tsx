@@ -338,18 +338,18 @@ export function PetRecordDialog({
             defaults={{ petId: pet.id, clientId: pet.clientId }}
             onCancel={() => setNewOpen(false)}
             onSubmit={(data) => {
-              // Try to attach to a current appointment for this pet today
-              const today = data.date || toLocalDateStr(new Date());
+              const targetDate = data.date || toLocalDateStr(new Date());
+              const targetTime = (data as any).time || "09:00";
               const active = appointments.find(
-                (a) => a.petId === pet.id && a.date === today && a.status !== "Cancelada" && a.status !== "Finalizada"
+                (a) => a.petId === pet.id && a.date === targetDate && a.status !== "Cancelada" && a.status !== "Finalizada"
               );
               if (active) {
                 addConsultationFromAppointment(data, active.id);
               } else {
-                addConsultation({ ...data, id: crypto.randomUUID() });
+                addConsultation({ ...data, time: targetTime, id: crypto.randomUUID() });
               }
               setNewOpen(false);
-              toast.success("Consulta registrada");
+              toast.success("Consulta registrada exitosamente");
             }}
           />
         </DialogContent>
@@ -366,6 +366,7 @@ export function PetRecordDialog({
               lockContext
               defaults={{
                 date: editingConsult.date,
+                time: (editingConsult as any).time || "09:00",
                 vetId: editingConsult.vetId,
                 petId: editingConsult.petId,
                 clientId: pet.clientId,

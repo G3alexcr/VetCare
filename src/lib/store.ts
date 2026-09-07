@@ -1002,10 +1002,13 @@ export function deleteConsultation(id: string) {
   void Promise.resolve(db.from("consultations").delete().eq("id", id)).then(() => {}).catch((e) => console.error(e));
 }
 
-export function addConsultation(c: Omit<LinkedConsultation, "clinicId"> & { clientId?: string }) {
+export function addConsultation(c: Omit<LinkedConsultation, "clinicId"> & { clientId?: string; time?: string }) {
   const clinicId = getCurrentClinicId();
   const finalId = asUUID(c.id);
   const finalDate = toLocalDateStr(c.date);
+  const now = new Date();
+  const defaultTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const finalTime = (c as any).time || defaultTimeStr;
   let appointmentId = c.appointmentId ? asUUID(c.appointmentId) : undefined;
   const s = state;
   let newAppointment: TenantAppointment | null = null;
@@ -1016,15 +1019,17 @@ export function addConsultation(c: Omit<LinkedConsultation, "clinicId"> & { clie
     );
     if (existing) {
       appointmentId = existing.id;
+      if (c.time && existing.time !== c.time) {
+        existing.time = c.time;
+        void Promise.resolve(db.from("appointments").update({ time: c.time }).eq("id", existing.id)).catch(console.error);
+      }
     } else {
       const pet = s.pets.find((p) => p.id === c.petId);
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       newAppointment = {
         id: asUUID(),
         clinicId,
         date: finalDate,
-        time: timeStr,
+        time: finalTime,
         clientId: c.clientId || pet?.clientId || "",
         petId: c.petId,
         vetId: c.vetId,
