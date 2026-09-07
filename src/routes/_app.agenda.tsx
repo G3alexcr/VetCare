@@ -53,7 +53,9 @@ import {
 } from "@/lib/store";
 import { toLocalDateStr } from "@/lib/utils";
 import { toast } from "sonner";
-import { Receipt } from "lucide-react";
+import { Receipt, Mail } from "lucide-react";
+import { AppointmentEmailDialog } from "@/components/appointment-email-dialog";
+import type { AppointmentEmailData } from "@/lib/email-templates";
 
 export const Route = createFileRoute("/_app/agenda")({
   head: () => ({ meta: [{ title: "Agenda — Go2Vet" }] }),
@@ -90,6 +92,7 @@ function AgendaPage() {
   const [defaultTime, setDefaultTime] = useState("09:00");
   const [startConsultFor, setStartConsultFor] = useState<Appointment | null>(null);
   const [payData, setPayData] = useState<PayConsultationData | null>(null);
+  const [emailAppointmentData, setEmailAppointmentData] = useState<AppointmentEmailData | null>(null);
 
   const cursorDateStr = toLocalDateStr(cursor);
   const todayStr = toLocalDateStr(new Date());
@@ -234,6 +237,8 @@ function AgendaPage() {
     const chosenPetId = selectedPetId || d.petId || pets[0]?.id || "";
     const chosenPet = pets.find((p) => p.id === chosenPetId);
     const finalClientId = selectedClientId || d.clientId || chosenPet?.clientId || clientes[0]?.id || "";
+    const chosenClient = clientes.find((c) => c.id === finalClientId);
+    const chosenVet = vets.find((v) => v.id === d.vetId);
 
     addAppointment({
       id: crypto.randomUUID(),
@@ -247,6 +252,19 @@ function AgendaPage() {
     });
     setOpen(false);
     toast.success("Cita programada con éxito");
+
+    // Prompt to send appointment confirmation email
+    setEmailAppointmentData({
+      clientName: chosenClient?.fullName || chosenClient?.name || "Tutor",
+      clientEmail: chosenClient?.email || "",
+      petName: chosenPet?.name || "Mascota",
+      petSpecies: chosenPet?.species,
+      petBreed: chosenPet?.breed,
+      vetName: chosenVet?.nombre,
+      date: d.date,
+      time: d.time,
+      reason: d.reason,
+    });
   };
 
   // Mini calendar days calculation
@@ -694,6 +712,30 @@ function AgendaPage() {
 
                           {/* Actions & Status */}
                           <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                            {/* Email Button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs text-sky-700 border-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/30 gap-1 px-2.5"
+                              title="Enviar confirmación por Correo"
+                              onClick={() => {
+                                setEmailAppointmentData({
+                                  clientName: client?.fullName || client?.name || "Tutor",
+                                  clientEmail: client?.email || "",
+                                  petName: pet?.name || "Mascota",
+                                  petSpecies: pet?.species,
+                                  petBreed: pet?.breed,
+                                  vetName: vet?.nombre,
+                                  date: a.date,
+                                  time: a.time,
+                                  reason: a.reason,
+                                });
+                              }}
+                            >
+                              <Mail className="h-3.5 w-3.5 text-sky-600" />
+                              <span className="hidden sm:inline">Correo</span>
+                            </Button>
+
                             {/* WhatsApp Button */}
                             {waLink && (
                               <Button
@@ -1055,6 +1097,15 @@ function AgendaPage() {
         onOpenChange={(o) => { if (!o) setPayData(null); }}
         data={payData}
         onSuccess={() => setPayData(null)}
+      />
+
+      {/* Diálogo para enviar correo de confirmación de cita */}
+      <AppointmentEmailDialog
+        open={emailAppointmentData !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmailAppointmentData(null);
+        }}
+        data={emailAppointmentData}
       />
     </div>
   );

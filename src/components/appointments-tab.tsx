@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, CalendarClock, AlertTriangle, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, CalendarClock, AlertTriangle, Clock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,8 @@ import { usePets } from "@/lib/pets-store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
 import { toast } from "sonner";
 import { toLocalDateStr } from "@/lib/utils";
+import { AppointmentEmailDialog } from "@/components/appointment-email-dialog";
+import type { AppointmentEmailData } from "@/lib/email-templates";
 
 const statuses: AppointmentStatus[] = ["Pendiente", "Confirmada", "En atención", "Finalizada", "Cancelada"];
 
@@ -76,6 +78,7 @@ export function AppointmentsTab({ petId }: { petId: string }) {
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [viewing, setViewing] = useState<Appointment | null>(null);
   const [confirmDel, setConfirmDel] = useState<Appointment | null>(null);
+  const [emailAppointmentData, setEmailAppointmentData] = useState<AppointmentEmailData | null>(null);
 
   const [formDate, setFormDate] = useState<string>(today());
   const [formTime, setFormTime] = useState<string>("09:00");
@@ -118,11 +121,15 @@ export function AppointmentsTab({ petId }: { petId: string }) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const d = Object.fromEntries(fd.entries()) as Record<string, string>;
+    const targetDate = toLocalDateStr(formDate || d.date);
+    const targetTime = formTime || d.time;
+    const targetVetId = formVetId || d.vetId;
+
     if (editing) {
       updateAppointment(editing.id, {
-        date: toLocalDateStr(formDate || d.date),
-        time: formTime || d.time,
-        vetId: formVetId || d.vetId,
+        date: targetDate,
+        time: targetTime,
+        vetId: targetVetId,
         reason: d.reason,
         status: d.status as AppointmentStatus,
       });
@@ -130,15 +137,31 @@ export function AppointmentsTab({ petId }: { petId: string }) {
     } else {
       addAppointment({
         id: crypto.randomUUID(),
-        date: toLocalDateStr(formDate || d.date),
-        time: formTime || d.time,
+        date: targetDate,
+        time: targetTime,
         clientId: defaultClientId,
         petId,
-        vetId: formVetId || d.vetId,
+        vetId: targetVetId,
         reason: d.reason,
         status: "Pendiente",
       });
       toast.success("Cita agendada exitosamente");
+
+      const vet = vets.find((v) => v.id === targetVetId);
+      const client = clientes.find((c) => c.id === defaultClientId);
+
+      // Trigger appointment confirmation email dialog
+      setEmailAppointmentData({
+        clientName: client?.fullName || client?.name || "Tutor",
+        clientEmail: client?.email || "",
+        petName: pet?.name || "Mascota",
+        petSpecies: pet?.species,
+        petBreed: pet?.breed,
+        vetName: vet?.nombre,
+        date: targetDate,
+        time: targetTime,
+        reason: d.reason,
+      });
     }
     setFormOpen(false);
   };
@@ -205,6 +228,29 @@ export function AppointmentsTab({ petId }: { petId: string }) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30"
+                          onClick={() => {
+                            const client = clientes.find((c) => c.id === a.clientId);
+                            const vet = vets.find((v) => v.id === a.vetId);
+                            setEmailAppointmentData({
+                              clientName: client?.fullName || client?.name || "Tutor",
+                              clientEmail: client?.email || "",
+                              petName: pet?.name || "Mascota",
+                              petSpecies: pet?.species,
+                              petBreed: pet?.breed,
+                              vetName: vet?.nombre,
+                              date: a.date,
+                              time: a.time,
+                              reason: a.reason,
+                            });
+                          }}
+                          title="Enviar correo de confirmación"
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
                         <Button size="icon" variant="ghost" onClick={() => setViewing(a)} title="Ver">
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -382,6 +428,14 @@ export function AppointmentsTab({ petId }: { petId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AppointmentEmailDialog
+        open={emailAppointmentData !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmailAppointmentData(null);
+        }}
+        data={emailAppointmentData}
+      />
     </div>
   );
 }
