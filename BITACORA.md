@@ -1,7 +1,54 @@
-﻿# 📋 BITÁCORA DE DESARROLLO — PAWS PATIENTS PRO (VETCARE)
+# 📋 BITÁCORA DE DESARROLLO — PAWS PATIENTS PRO (VETCARE)
 
 > **Norma de registro**: Las entradas más recientes se agregan siempre al **inicio** de la bitácora (orden cronológico inverso).  
 > Cada registro documenta la fecha/hora, la incidencia o requerimiento, lo que está funcionando correctamente, los problemas detectados y la solución técnica aplicada.
+
+---
+
+## 📅 [2026-09-07 03:34] — Sistema de Correos Automáticos Resend + Mejoras UI Cobros
+
+### 📝 Incidencia / Requerimiento
+El usuario solicitó:
+1. Confirmaciones automáticas de citas y resúmenes clínicos de consultas por correo electrónico a los clientes.
+2. Configuración de API Key de Resend por veterinaria desde la pantalla de Configuración.
+3. Visibilidad del campo API Key (ícono de ojo para mostrar/ocultar).
+4. Cierre automático del modal de correo al confirmar el envío.
+5. Que la orden de cobro enviada a Recepción sea visible desde Caja, Punto de Venta y Facturación.
+6. Rediseño del modal de cobro de consulta para separar claramente "Enviar a Recepción" de "Cobrar en Consultorio".
+
+### ✅ Lo que está bien / funcionando
+- **Dominio `go2vet.online`** verificado en Resend con DKIM, SPF y MX correctos.
+- **Envío automático en segundo plano** al crear una cita (Agenda) y al completar una consulta (Consultas), sin interacción manual del usuario.
+- **Configuración por clínica** en `Configuración > Correos / Resend`: API Key con toggle de visibilidad (ojo), nombre y correo del remitente, comprobador de conexión en vivo.
+- **Forzado del dominio verificado en servidor**: si `fromEmail` está vacío o contiene `resend.dev`, siempre se envía desde `citas@go2vet.online`, eliminando el error 403 de Resend.
+- **Cierre automático de modales** de cita y consulta inmediatamente tras el envío exitoso.
+- **Órdenes de cobro pendientes** visibles en Punto de Venta, Caja y Facturación con indicador azul parpadeante animado.
+- **Modal de cobro rediseñado** con pestañas: "Enviar a Recepción" (azul, por defecto) y "Cobrar en Consultorio" (verde); cierre inmediato en ambas acciones.
+
+### ⚠️ Lo que se tuvo que corregir
+1. **Error 403 de Resend**: El `from` header usaba `onboarding@resend.dev` (sandbox) en lugar del dominio verificado. Resend solo permite enviar a correos externos desde un dominio propio verificado.
+2. **Modal de correo no se cerraba**: El primer intento usó `setTimeout(500ms)` que no disparaba correctamente. Se corrigió llamando `onOpenChange(false)` directamente.
+3. **`Receipt is not defined` en `/punto-venta`**: El ícono `Receipt` de `lucide-react` no estaba importado y colisionaba con el tipo local `Receipt`. Se renombró el tipo a `PosReceiptData` y se importó el ícono.
+4. **Caché del Service Worker (PWA)**: El navegador cargaba chunks viejos (404). Requirió `Empty Cache and Hard Reload` desde DevTools.
+
+### 🔧 Archivos modificados
+| Archivo | Cambio |
+|---|---|
+| `src/lib/email.functions.ts` | Función `getValidSenderEmail()` fuerza `citas@go2vet.online` en los tres server functions. |
+| `src/lib/clinic-email-store.ts` | `getClinicEmailConfig()` sanitiza automáticamente valores `resend.dev` en localStorage. |
+| `src/routes/_app.configuracion.tsx` | Placeholder y fallback actualizados a `citas@go2vet.online`. |
+| `src/components/appointment-email-dialog.tsx` | Cierre inmediato del modal en éxito. |
+| `src/components/consultation-email-dialog.tsx` | Cierre inmediato del modal en éxito. |
+| `src/components/pay-consultation-dialog.tsx` | Rediseño completo con Tabs, cierre inmediato, sin pantalla de confirmación intermedia. |
+| `src/routes/_app.caja.tsx` | Banner de órdenes pendientes con cards por consulta y modal de cobro rápido. |
+| `src/routes/_app.punto-venta.tsx` | Import de ícono `Receipt`; tipo renombrado `Receipt → PosReceiptData`. |
+
+### 📦 Commits de esta sesión
+- `743c7a7` — fix: enforce verified domain `citas@go2vet.online` to eliminate Resend 403
+- `8522947` — feat: auto-close email dialogs upon successful dispatch
+- `7461a99` — fix: close email dialogs immediately without delay
+- `261f47f` — feat: redesign PayConsultationDialog + pending orders in Caja/POS/Facturación
+- `291d37f` — fix: import Receipt icon, rename type PosReceiptData in punto-venta
 
 ---
 
