@@ -46,7 +46,7 @@ const defaultSettings: AiSettings = {
   maxTokens: 2048,
   language: "es",
   fishApiKey: "",
-  fishVoiceId: "",
+  fishVoiceId: "655e3fff79c7463dbf70e2ed5c4bd5d3",
   autoSpeak: false,
 };
 

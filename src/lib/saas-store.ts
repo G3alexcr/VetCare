@@ -440,6 +440,9 @@ export const updateClinic = async (id: string, patch: Partial<Clinic>) => {
   if (patch.aiApiKey !== undefined) row.ai_api_key = patch.aiApiKey;
   if (patch.aiModel !== undefined) row.ai_model = patch.aiModel;
   if (patch.emergencyPhone !== undefined) row.emergency_phone = patch.emergencyPhone;
+  if (patch.fishAudioApiKey !== undefined) row.fish_audio_api_key = patch.fishAudioApiKey;
+  if (patch.fishAudioVoiceId !== undefined) row.fish_audio_voice_id = patch.fishAudioVoiceId;
+  if (patch.aiAutoSpeak !== undefined) row.ai_auto_speak = patch.aiAutoSpeak;
   const { error } = await db.from("clinics").update(row).eq("id", id);
   if (error) throw new Error(error.message);
   setState((s) => {

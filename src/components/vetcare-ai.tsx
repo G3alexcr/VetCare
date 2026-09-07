@@ -102,11 +102,14 @@ const SYSTEMS: Record<string, string> = {
     "Analiza el documento o imagen adjunta del paciente y genera en markdown: Resumen, Hallazgos relevantes y " +
     "Observaciones preliminares. Usa lenguaje presuntivo; nunca emitas diagnósticos definitivos a partir del documento.",
   chat:
-    "Eres un copiloto clínico veterinario de alto nivel para médicos veterinarios. Responde con precisión clínica preguntas " +
-    "sobre farmacología veterinaria, dosificaciones exactas (indicando rangos terapéuticos estándar en mg/kg, vía de administración " +
-    "y frecuencia para caninos o felinos), diagnósticos diferenciales, protocolos anestésicos y manejo clínico. " +
-    "Si hay un expediente de paciente seleccionado en el contexto, contextualiza con sus datos (peso, especie, edad). " +
-    "Sé directo, conciso, útil y con criterio profesional veterinario.",
+    "Eres VetCare AI, el asistente inteligente y copiloto clínico de la clínica veterinaria. " +
+    "Tienes acceso directo y en tiempo real a toda la base de datos de la clínica (lista completa de mascotas/pacientes, " +
+    "clientes/propietarios, citas de la agenda, inventario y productos con alertas de stock, historial de consultas y equipo veterinario). " +
+    "Cuando te pregunten sobre la clínica o sus registros (por ejemplo cuántas mascotas hay registradas, quién es el dueño de una mascota, " +
+    "qué citas hay hoy o qué productos están por agotarse), DEBES responder con certeza, precisión y amabilidad utilizando los datos exactos del contexto de la base de datos de la clínica. " +
+    "Para consultas farmacológicas o clínicas, responde con rigor veterinario profesional (dosis exactas en mg/kg para caninos o felinos, diagnósticos diferenciales y precauciones). " +
+    "Si hay un expediente de paciente seleccionado, contextualiza tu respuesta con sus datos clínicos. " +
+    "Sé conciso, directo, empático y responde en formato markdown.",
 };
 
 function calcAge(birthDate: string): string {
@@ -236,6 +239,91 @@ function useClinicalContext() {
     lines.push(`\nCITAS (${appts.length}):`);
     for (const a of appts) {
       lines.push(`- ${a.date} ${a.time} · ${a.reason} · Estado: ${a.status} · Vet: ${vetName(a.vetId)}`);
+    }
+
+    return lines.join("\n");
+  };
+}
+
+/** Construye un resumen en tiempo real de la base de datos de la clínica para que la IA conozca todos los pacientes, clientes, citas, inventario y consultas */
+function useGlobalClinicContext() {
+  const pets = usePets();
+  const clientes = useClientes();
+  const appointments = useAppointments();
+  const consultations = useConsultations();
+  const products = useProducts();
+  const vets = useVeterinarios();
+  const clinics = useClinics();
+  const currentClinicId = useCurrentClinicId();
+  const currentClinic = clinics.find((c) => c.id === currentClinicId);
+
+  return (): string => {
+    const lines: string[] = [];
+    lines.push(`=== BASE DE DATOS EN TIEMPO REAL: ${currentClinic?.name || "Clínica Veterinaria VetCare"} ===`);
+
+    const activePets = pets.filter((p) => p.active !== false);
+    lines.push(`\n🐾 PACIENTES / MASCOTAS REGISTRADAS (Total exacto: ${activePets.length} mascotas):`);
+    if (activePets.length === 0) {
+      lines.push("- No hay mascotas registradas actualmente en la base de datos.");
+    } else {
+      activePets.forEach((p, idx) => {
+        const owner = clientes.find((c) => c.id === p.clientId);
+        lines.push(
+          `${idx + 1}. Nombre: "${p.name}" | Especie: ${p.species || "No especificada"} | Raza: ${p.breed || "Mestizo"} | Sexo: ${p.sex || "—"} | Edad aprox: ${calcAge(p.birthDate)} | Peso: ${p.weight ? p.weight + " kg" : "—"} | Propietario: ${owner?.fullName || "Sin dueño asignado"}`
+        );
+      });
+    }
+
+    lines.push(`\n👤 CLIENTES / PROPIETARIOS REGISTRADOS (Total exacto: ${clientes.length} clientes):`);
+    if (clientes.length === 0) {
+      lines.push("- No hay clientes registrados.");
+    } else {
+      clientes.forEach((c, idx) => {
+        const owned = activePets.filter((p) => p.clientId === c.id).map((p) => p.name);
+        lines.push(
+          `${idx + 1}. ${c.fullName} | Teléfono: ${c.phone || "—"} | Email: ${c.email || "—"} | Mascotas: [${owned.join(", ") || "Ninguna"}]`
+        );
+      });
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const todayAppts = appointments.filter((a) => a.date === today);
+    const upcomingAppts = appointments
+      .filter((a) => a.date >= today)
+      .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+
+    lines.push(`\n📅 AGENDA Y CITAS (Fecha hoy: ${today} | Citas hoy: ${todayAppts.length} | Próximas citas: ${upcomingAppts.length}):`);
+    if (upcomingAppts.length === 0) {
+      lines.push("- No hay citas programadas para hoy ni próximas fechas.");
+    } else {
+      upcomingAppts.slice(0, 15).forEach((a) => {
+        const pet = pets.find((p) => p.id === a.petId);
+        const vet = vets.find((v) => v.id === a.vetId);
+        lines.push(`- Cita: ${a.date} a las ${a.time} | Paciente: ${pet?.name || "—"} | Motivo: ${a.reason} | Estado: ${a.status} | Médico: ${vet?.nombre || "—"}`);
+      });
+    }
+
+    const lowStock = products.filter((p) => Number(p.stock) <= Number(p.minStock));
+    lines.push(`\n📦 INVENTARIO DE FARMACIA Y PRODUCTOS (Total productos: ${products.length} | Productos en stock crítico o bajo: ${lowStock.length}):`);
+    if (lowStock.length > 0) {
+      lines.push("⚠️ Productos con stock bajo:");
+      lowStock.slice(0, 15).forEach((p) => {
+        lines.push(`- ${p.name}: ${p.stock} unidades en stock (mínimo requerido: ${p.minStock})`);
+      });
+    }
+
+    lines.push(`\n📋 HISTORIAL DE CONSULTAS MÉDICAS (Total realizadas: ${consultations.length} consultas):`);
+    const recentCons = [...consultations].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+    if (recentCons.length > 0) {
+      lines.push("Últimas consultas registradas:");
+      recentCons.forEach((c) => {
+        const pet = pets.find((p) => p.id === c.petId);
+        lines.push(`- ${c.date} | Paciente: ${pet?.name || "—"} | Motivo: ${c.reason} | Diagnóstico: ${c.diagnosis || "—"}`);
+      });
+    }
+
+    if (vets.length > 0) {
+      lines.push(`\n👨‍⚕️ EQUIPO VETERINARIO (${vets.length} veterinarios): ` + vets.map((v) => `${v.nombre} (${v.especialidad || "General"})`).join(", "));
     }
 
     return lines.join("\n");
@@ -403,7 +491,7 @@ function useTTS() {
       .slice(0, 3000);
 
     const fishKey = settings.fishApiKey || currentClinic?.fishAudioApiKey || "";
-    const fishVoice = settings.fishVoiceId || currentClinic?.fishAudioVoiceId || "";
+    const fishVoice = settings.fishVoiceId || currentClinic?.fishAudioVoiceId || "655e3fff79c7463dbf70e2ed5c4bd5d3";
 
     if (fishKey) {
       try {
@@ -511,6 +599,7 @@ function useSpeechDictation(onTranscript: (chunk: string) => void) {
 function ChatTool() {
   const panel = useAiPanel();
   const buildContext = useClinicalContext();
+  const buildClinicSummary = useGlobalClinicContext();
   const { loading, run } = useAiRunner();
   const settings = useAiSettings();
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
@@ -593,11 +682,12 @@ function ChatTool() {
     const transcript = [...messages, { role: "user" as const, text: question }]
       .map((m) => `${m.role === "user" ? "Personal" : "VetCare AI"}: ${m.text}`)
       .join("\n");
-    const context = petId ? `\n\nCONTEXTO DEL EXPEDIENTE:\n${buildContext(petId)}` : "";
+    const clinicContext = `\n\n${buildClinicSummary()}`;
+    const petContext = petId ? `\n\nCONTEXTO DEL EXPEDIENTE DEL PACIENTE SELECCIONADO:\n${buildContext(petId)}` : "";
     const answer = await run({
       tool: "Buscador clínico",
       system: SYSTEMS.chat,
-      prompt: `Conversación:\n${transcript}${context}\n\nResponde la última pregunta del personal.`,
+      prompt: `Conversación:\n${transcript}${clinicContext}${petContext}\n\nResponde a la última pregunta del usuario utilizando los datos reales de la clínica proporcionados arriba.`,
       petId: petId || undefined,
     });
     if (answer) {
@@ -1142,6 +1232,14 @@ function HistorialTool() {
   );
 }
 
+const FISH_LATIN_VOICES = [
+  { id: "655e3fff79c7463dbf70e2ed5c4bd5d3", name: "Verity — Asistente Femenina (Español Latino) ⭐ Recomendada" },
+  { id: "07a03f5ca90849b3bf0638135b0a40c3", name: "Natasha — Femenina Cálida (Español)" },
+  { id: "21adf3cda02a4aa88dc593353cc9d715", name: "Jarvis — Asistente Masculino (Español Latino)" },
+  { id: "fe01beac32a141fc8173aac6c8729499", name: "Médico — Profesional Clínico Masculino (Español)" },
+  { id: "custom", name: "Personalizada (Ingresar ID propio de Fish Audio)" },
+];
+
 function ConfigTool() {
   const currentClinicId = useCurrentClinicId();
   const clinics = useClinics();
@@ -1152,6 +1250,7 @@ function ConfigTool() {
   const [emergencyPhone, setEmergencyPhone] = useState(currentClinic?.emergencyPhone || "");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingVoice, setTestingVoice] = useState(false);
 
   useEffect(() => {
     if (currentClinic) {
@@ -1167,7 +1266,7 @@ function ConfigTool() {
         apiKey: currentClinic.aiApiKey || prev.apiKey || "",
         model: cleanModel,
         fishApiKey: currentClinic.fishAudioApiKey || prev.fishApiKey || "",
-        fishVoiceId: currentClinic.fishAudioVoiceId || prev.fishVoiceId || "",
+        fishVoiceId: currentClinic.fishAudioVoiceId || prev.fishVoiceId || "655e3fff79c7463dbf70e2ed5c4bd5d3",
         autoSpeak: currentClinic.aiAutoSpeak ?? prev.autoSpeak ?? false,
       }));
       if (currentClinic.emergencyPhone) {
@@ -1177,6 +1276,36 @@ function ConfigTool() {
       setForm(settings);
     }
   }, [currentClinic, settings]);
+
+  const handleTestVoice = async () => {
+    const key = form.fishApiKey || currentClinic?.fishAudioApiKey;
+    if (!key) {
+      toast.error("Ingresa tu API Key de Fish Audio antes de probar la voz.");
+      return;
+    }
+    const voice = form.fishVoiceId || "655e3fff79c7463dbf70e2ed5c4bd5d3";
+    setTestingVoice(true);
+    try {
+      const { runFishAudioTTS } = await import("@/lib/tts.functions");
+      const res = await runFishAudioTTS({
+        data: {
+          text: "Hola, soy el copiloto de inteligencia artificial de tu veterinaria. ¿En qué te puedo ayudar hoy?",
+          apiKey: key,
+          voiceId: voice,
+        },
+      });
+      const audio = new Audio(res.audioDataUrl);
+      audio.onended = () => setTestingVoice(false);
+      audio.onerror = () => {
+        setTestingVoice(false);
+        toast.error("Error al reproducir el audio de prueba.");
+      };
+      await audio.play();
+    } catch (err: any) {
+      setTestingVoice(false);
+      toast.error("Error al probar voz: " + (err.message || err));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -1405,17 +1534,69 @@ function ConfigTool() {
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>ID de Voz (Voice ID) — opcional</Label>
-            <Input
-              placeholder="Deja vacío para voz predeterminada, o pega el ID de tu voz clonada"
-              value={form.fishVoiceId || ""}
-              onChange={(e) => setForm({ ...form, fishVoiceId: e.target.value })}
-              className="font-mono text-xs"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Voz en Español Latino (Fish Audio)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 text-teal-700 dark:text-teal-400 border-teal-300 dark:border-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/40"
+                disabled={testingVoice}
+                onClick={handleTestVoice}
+              >
+                {testingVoice ? <Loader2 className="w-3 h-3 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                {testingVoice ? "Reproduciendo..." : "🔊 Probar voz"}
+              </Button>
+            </div>
+
+            <Select
+              value={
+                FISH_LATIN_VOICES.some((v) => v.id === form.fishVoiceId)
+                  ? form.fishVoiceId
+                  : form.fishVoiceId
+                    ? "custom"
+                    : "655e3fff79c7463dbf70e2ed5c4bd5d3"
+              }
+              onValueChange={(val) => {
+                if (val === "custom") {
+                  if (FISH_LATIN_VOICES.some((v) => v.id === form.fishVoiceId)) {
+                    setForm({ ...form, fishVoiceId: "" });
+                  }
+                } else {
+                  setForm({ ...form, fishVoiceId: val });
+                }
+              }}
+            >
+              <SelectTrigger className="text-xs">
+                <SelectValue placeholder="Seleccionar voz latina..." />
+              </SelectTrigger>
+              <SelectContent>
+                {FISH_LATIN_VOICES.map((v) => (
+                  <SelectItem key={v.id} value={v.id} className="text-xs">
+                    {v.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(!FISH_LATIN_VOICES.some((v) => v.id === form.fishVoiceId && v.id !== "custom") ||
+              form.fishVoiceId === "custom") && (
+              <div className="pt-1 space-y-1">
+                <Label className="text-[11px] text-muted-foreground">ID Personalizado de Fish Audio</Label>
+                <Input
+                  placeholder="Pega el reference_id de tu voz clonada en fish.audio"
+                  value={form.fishVoiceId === "custom" ? "" : form.fishVoiceId || ""}
+                  onChange={(e) => setForm({ ...form, fishVoiceId: e.target.value })}
+                  className="font-mono text-xs"
+                />
+              </div>
+            )}
             <p className="text-[11px] text-muted-foreground">
-              En <a href="https://fish.audio" target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline">fish.audio</a> puedes clonar la voz de tu clínica en 10 segundos.
-              El ID lo encuentras en la URL de tu voz creada.
+              Voz con acento latino cálido y natural. Puedes cambiar de voz o clonar la tuya en{" "}
+              <a href="https://fish.audio" target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline">
+                fish.audio
+              </a>.
             </p>
           </div>
 

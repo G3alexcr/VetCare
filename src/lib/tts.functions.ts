@@ -6,6 +6,8 @@ import { z } from "zod";
  * Uses Fish Audio exclusively (model: s2.1-pro-free) with the clinic's Fish Audio key.
  * Returns base64-encoded audio (mp3).
  */
+export const DEFAULT_LATIN_VOICE = "655e3fff79c7463dbf70e2ed5c4bd5d3"; // Verity — Español Latino
+
 export const runFishAudioTTS = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
@@ -18,7 +20,8 @@ export const runFishAudioTTS = createServerFn({ method: "POST" })
       .parse(input)
   )
   .handler(async ({ data }) => {
-    const voiceId = data.voiceId?.trim() || undefined;
+    // Si no se especifica voz o viene vacía, siempre usar voz latina natural de alta calidad
+    const voiceId = data.voiceId?.trim() || DEFAULT_LATIN_VOICE;
 
     const body: Record<string, unknown> = {
       text: data.text,
@@ -28,10 +31,8 @@ export const runFishAudioTTS = createServerFn({ method: "POST" })
       normalize: true,
       latency: "balanced",
       model_id: "s2.1-pro-free",
+      reference_id: voiceId,
     };
-    if (voiceId) {
-      body.reference_id = voiceId;
-    }
 
     const res = await fetch("https://api.fish.audio/v1/tts", {
       method: "POST",
