@@ -66,12 +66,8 @@ export function AppointmentEmailDialog({
             { duration: 8000 }
           );
         } else {
-          setSentSuccess(true);
           toast.success(`✓ Correo de cita enviado exitosamente a ${recipientEmail}`);
-          setTimeout(() => {
-            onOpenChange(false);
-            setSentSuccess(false);
-          }, 500);
+          onOpenChange(false);
         }
       } else {
         toast.error(res.error || "No se pudo despachar el correo");
