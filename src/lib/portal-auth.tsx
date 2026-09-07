@@ -71,7 +71,38 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setReady(true);
-  }, []);
+    // Sincronizar y reparar automáticamente la identidad del propietario contra la base de datos real
+    if (owner?.email) {
+      const clean = owner.email.trim().toLowerCase();
+      db.from("clients")
+        .select("*")
+        .ilike("email", clean)
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            const r = data[0] as Record<string, unknown>;
+            const realId = String(r.id);
+            const realName = String((r.full_name || r.name) ?? "");
+            if (owner.id !== realId || (realName && owner.fullName !== realName)) {
+              const healed: Client = {
+                ...owner,
+                id: realId,
+                fullName: realName || owner.fullName,
+                name: realName || owner.name,
+                phone: String(r.phone ?? owner.phone ?? ""),
+                whatsapp: String(r.whatsapp ?? owner.whatsapp ?? ""),
+                identification: String(r.identification ?? owner.identification ?? ""),
+              };
+              setOwner(healed);
+              try {
+                localStorage.setItem("vetcare_portal_owner", JSON.stringify(healed));
+              } catch {}
+            }
+          }
+        })
+        .catch(console.error);
+    }
+  }, [owner?.email, owner?.id]);
 
   const login = async (email: string, _password: string): Promise<{ ok: boolean; error?: string }> => {
     const clean = email.trim().toLowerCase();

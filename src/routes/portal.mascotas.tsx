@@ -35,6 +35,7 @@ import { ImageInput } from "@/components/image-input";
 import { PortalLayout } from "@/components/portal-layout";
 import { usePortalAuth } from "@/lib/portal-auth";
 import { type Pet } from "@/lib/mock-data";
+import { db } from "@/lib/supabase";
 import { usePets, useAllPets, updatePet } from "@/lib/pets-store";
 import { useAllClientes } from "@/lib/clientes-store";
 import { useAllVeterinarios } from "@/lib/veterinarios-store";
@@ -98,7 +99,47 @@ function MyPetsPage() {
   const isJuan = emailLower === "juan@hotmail.com" || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f102");
   const isGhiulina = emailLower === "ghiulyscr@gmail.com" || clientIdsForOwner.has("5e700fd9-3323-433c-9570-294e46c10785") || clientIdsForOwner.has("00000000-0000-0000-0000-00000000f103");
 
-  let rawPets = allPets
+  const [directPets, setDirectPets] = useState<Pet[]>([]);
+
+  useEffect(() => {
+    if (!emailLower && !owner?.id) return;
+    (async () => {
+      try {
+        const cIds = new Set<string>();
+        if (owner?.id) cIds.add(owner.id);
+        if (emailLower) {
+          const { data: cData } = await db.from("clients").select("id").ilike("email", emailLower);
+          (cData ?? []).forEach((c: any) => cIds.add(String(c.id)));
+        }
+        if (cIds.size === 0) return;
+        const { data: pData } = await db.from("pets").select("*").in("client_id", Array.from(cIds));
+        if (pData && pData.length > 0) {
+          setDirectPets(
+            pData.map((r: any) => ({
+              id: String(r.id),
+              name: String(r.name ?? ""),
+              species: String(r.species ?? "Canino"),
+              breed: String(r.breed ?? ""),
+              sex: (r.sex as Pet["sex"]) ?? "Macho",
+              color: String(r.color ?? ""),
+              birthDate: String(r.birth_date ?? ""),
+              weight: Number(r.weight ?? 0),
+              microchip: String(r.microchip ?? ""),
+              sterilized: Boolean(r.sterilized),
+              allergies: String(r.allergies ?? ""),
+              notes: String(r.notes ?? ""),
+              photo: String(r.photo ?? ""),
+              clientId: String(r.client_id ?? ""),
+            }))
+          );
+        }
+      } catch (e) {
+        console.error("Error fetching direct pets:", e);
+      }
+    })();
+  }, [emailLower, owner?.id]);
+
+  let rawPets = [...allPets, ...directPets]
     .filter((p) => clientIdsForOwner.has(p.clientId) || (isMaria && p.name === "Rocky") || (isGhiulina && p.name === "Nani"))
     .map((p) => {
       if ((p.id === "09f5d472-9f7e-4e83-9f7d-702fb78348b6" || p.name === "Nani") && (!p.photo || p.photo.includes("unsplash.com"))) {
