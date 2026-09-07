@@ -246,6 +246,9 @@ type AiAttachment = { name: string; kind: "image" | "file"; dataUrl: string };
 
 function useAiRunner() {
   const settings = useAiSettings();
+  const clinics = useClinics();
+  const currentClinicId = useCurrentClinicId();
+  const currentClinic = clinics.find((c) => c.id === currentClinicId);
   const { user } = useAuth();
   const pets = usePets();
   const [loading, setLoading] = useState(false);
@@ -261,15 +264,18 @@ function useAiRunner() {
     setLoading(true);
     setResult("");
     try {
+      const effectiveProvider = (currentClinic?.aiProvider as AiProvider) || settings.provider || "openai";
+      const effectiveApiKey = currentClinic?.aiApiKey || settings.apiKey || undefined;
+      const effectiveModel = currentClinic?.aiModel || settings.model || "gpt-4o-mini";
       const lang =
         settings.language === "en" ? "Responde íntegramente en inglés." : "Responde íntegramente en español.";
       const res = await runVetCareAI({
         data: {
           system: `${opts.system}\n${lang}`,
           prompt: opts.prompt,
-          provider: settings.provider,
-          model: settings.model,
-          apiKey: settings.apiKey,
+          provider: effectiveProvider,
+          model: effectiveModel,
+          apiKey: effectiveApiKey,
           temperature: settings.temperature,
           maxTokens: settings.maxTokens,
           attachments: opts.attachments,
@@ -398,18 +404,15 @@ function useTTS() {
 
     const fishKey = settings.fishApiKey || currentClinic?.fishAudioApiKey || "";
     const fishVoice = settings.fishVoiceId || currentClinic?.fishAudioVoiceId || "";
-    const openAiKey = settings.apiKey || currentClinic?.aiApiKey || "";
 
-    if (fishKey || openAiKey) {
+    if (fishKey) {
       try {
-        const { runVoiceTTS } = await import("@/lib/tts.functions");
-        const res = await runVoiceTTS({
+        const { runFishAudioTTS } = await import("@/lib/tts.functions");
+        const res = await runFishAudioTTS({
           data: {
             text: clean,
-            fishApiKey: fishKey || undefined,
-            fishVoiceId: fishVoice || undefined,
-            openAiApiKey: openAiKey || undefined,
-            openAiVoice: "nova",
+            apiKey: fishKey,
+            voiceId: fishVoice || undefined,
           },
         });
         const audio = new Audio(res.audioDataUrl);
@@ -423,7 +426,7 @@ function useTTS() {
         await audio.play();
         return;
       } catch (err: any) {
-        console.warn("TTS API falló, usando voz del navegador:", err);
+        console.warn("Fish Audio TTS falló, usando voz del navegador:", err);
       }
     }
 
@@ -599,11 +602,9 @@ function ChatTool() {
     });
     if (answer) {
       setMessages((m) => [...m, { role: "assistant", text: answer }]);
-      if (settings.autoSpeak) {
-        const idx = messages.length + 1;
-        setSpeakingIdx(idx);
-        speak(answer);
-      }
+      const idx = messages.length + 1;
+      setSpeakingIdx(idx);
+      void speak(answer);
     }
   };
 
