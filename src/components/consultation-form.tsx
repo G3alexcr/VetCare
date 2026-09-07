@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,11 @@ import { usePets } from "@/lib/pets-store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
 import { toLocalDateStr } from "@/lib/utils";
 import { useAppointments, STANDARD_HOURS, type LinkedConsultation } from "@/lib/store";
-import { Clock } from "lucide-react";
+import { Clock, Mic, MicOff, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { structureConsultationVoice } from "@/lib/ai.functions";
+import { useClinics, useCurrentClinicId } from "@/lib/saas-store";
+import { useAiSettings } from "@/lib/ai-store";
 
 export type ConsultationFormDefaults = {
   date?: string;
@@ -39,6 +43,11 @@ export function ConsultationForm({
   const pets = usePets();
   const vets = useVeterinarios();
   const appointments = useAppointments();
+  const clinics = useClinics();
+  const currentClinicId = useCurrentClinicId();
+  const currentClinic = clinics.find((c) => c.id === currentClinicId);
+  const aiSettings = useAiSettings();
+
   const d = defaults ?? {};
 
   const [selectedDate, setSelectedDate] = useState<string>(d.date ?? today);
@@ -56,6 +65,105 @@ export function ConsultationForm({
 
   const initialPetId = d.petId || availablePets[0]?.id || pets[0]?.id || "";
   const [selectedPetId, setSelectedPetId] = useState<string>(initialPetId);
+
+  // Estados de los campos de la consulta médica (para auto-llenado por voz con IA)
+  const [reason, setReason] = useState<string>(d.reason ?? "");
+  const [weight, setWeight] = useState<string>(defaultPet?.weight ? String(defaultPet.weight) : "");
+  const [temperature, setTemperature] = useState<string>("");
+  const [diagnosis, setDiagnosis] = useState<string>("");
+  const [treatment, setTreatment] = useState<string>("");
+  const [medications, setMedications] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
+
+  // Estado del dictado por voz y estructuración
+  const [recording, setRecording] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [structuring, setStructuring] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const startRecording = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      toast.error("Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.");
+      return;
+    }
+    const rec = new SpeechRec();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "es-ES";
+    rec.onresult = (e: any) => {
+      let full = "";
+      for (let i = 0; i < e.results.length; i++) {
+        full += e.results[i][0].transcript + " ";
+      }
+      setTranscript(full.trim());
+    };
+    rec.onerror = (e: any) => {
+      console.error("Speech rec error:", e);
+      setRecording(false);
+    };
+    rec.onend = () => setRecording(false);
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      setRecording(true);
+      toast.info("🎙️ Grabando consulta... Habla con naturalidad sobre el paciente.");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const stopAndStructure = async () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      setRecording(false);
+    }
+    const textToProcess = transcript.trim();
+    if (!textToProcess) {
+      toast.error("No se detectó ningún texto en la grabación.");
+      return;
+    }
+
+    setStructuring(true);
+    try {
+      const activePet = pets.find((p) => p.id === selectedPetId);
+      const petContext = activePet
+        ? `Paciente: ${activePet.name}, Especie: ${activePet.species}, Raza: ${activePet.breed}`
+        : undefined;
+
+      const effectiveProvider = (currentClinic?.aiProvider as any) || aiSettings.provider || "openai";
+      const effectiveApiKey = currentClinic?.aiApiKey || aiSettings.apiKey || undefined;
+      const effectiveModel = currentClinic?.aiModel || aiSettings.model || "gpt-4o-mini";
+
+      const res = await structureConsultationVoice({
+        data: {
+          transcript: textToProcess,
+          petContext,
+          provider: effectiveProvider,
+          apiKey: effectiveApiKey,
+          model: effectiveModel,
+        },
+      });
+
+      if (res.data) {
+        if (res.data.reason) setReason(res.data.reason);
+        if (res.data.weight !== undefined) setWeight(String(res.data.weight));
+        if (res.data.temperature !== undefined) setTemperature(String(res.data.temperature));
+        if (res.data.diagnosis) setDiagnosis(res.data.diagnosis);
+        if (res.data.treatment) setTreatment(res.data.treatment);
+        if (res.data.medications) setMedications(res.data.medications);
+        if (res.data.notes) setNotes(res.data.notes);
+        toast.success("✨ ¡Historia clínica estructurada con éxito! Revisa los campos y guarda.");
+      }
+    } catch (err: any) {
+      toast.error("Error al procesar con IA: " + (err.message || err));
+    } finally {
+      setStructuring(false);
+    }
+  };
 
   // Horas ya reservadas para la fecha y veterinario seleccionados
   const bookedHours = useMemo(() => {
@@ -85,30 +193,99 @@ export function ConsultationForm({
     if (petObj?.clientId && petObj.clientId !== selectedClientId) {
       setSelectedClientId(petObj.clientId);
     }
+    if (petObj?.weight && !weight) {
+      setWeight(String(petObj.weight));
+    }
   };
 
   const handle = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const v = Object.fromEntries(fd.entries()) as Record<string, string>;
     onSubmit({
       date: selectedDate,
       time: selectedTime,
-      vetId: selectedVetId || v.vetId,
-      petId: selectedPetId || v.petId,
+      vetId: selectedVetId,
+      petId: selectedPetId,
       clientId: selectedClientId,
-      reason: v.reason,
-      weight: Number(v.weight) || 0,
-      temperature: Number(v.temperature) || 0,
-      diagnosis: v.diagnosis ?? "",
-      treatment: v.treatment ?? "",
-      medications: v.medications ?? "",
-      notes: v.notes ?? "",
+      reason: reason.trim() || "Consulta general",
+      weight: Number(weight) || 0,
+      temperature: Number(temperature) || 0,
+      diagnosis: diagnosis.trim(),
+      treatment: treatment.trim(),
+      medications: medications.trim(),
+      notes: notes.trim(),
     });
   };
 
   return (
     <form onSubmit={handle} className="grid grid-cols-2 gap-4">
+      {/* ── BANNER ASISTENTE DE VOZ PARA LA CONSULTA ── */}
+      <div className="col-span-2 rounded-2xl border border-teal-200 dark:border-teal-800 bg-gradient-to-r from-teal-50/70 via-emerald-50/40 to-teal-50/70 dark:from-teal-950/30 dark:via-emerald-950/20 dark:to-teal-950/30 p-3.5 space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div>
+              <span className="text-xs font-bold text-teal-950 dark:text-teal-200">
+                Dictado Inteligente de Consulta con IA
+              </span>
+              <p className="text-[11px] text-muted-foreground">
+                Graba mientras revisas al paciente. La IA estructurará motivo, peso, T°, diagnóstico, tratamiento y receta automáticamente en los campos.
+              </p>
+            </div>
+          </div>
+
+          {/* Botón de acción */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!recording ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={startRecording}
+                disabled={structuring}
+                className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-xs gap-1.5 text-xs font-semibold"
+              >
+                <Mic className="h-3.5 w-3.5" />
+                Grabar Consulta por Voz
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={stopAndStructure}
+                disabled={structuring}
+                className="rounded-xl shadow-xs gap-1.5 text-xs font-semibold animate-pulse"
+              >
+                <MicOff className="h-3.5 w-3.5" />
+                Terminar y Estructurar con IA
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Estado en vivo mientras graba */}
+        {recording && (
+          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 space-y-1.5">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-red-600">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-ping inline-block" />
+              Escuchando en vivo... Habla libremente sobre los signos, diagnóstico, tratamiento y receta:
+            </div>
+            <p className="text-xs text-foreground italic bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-dashed">
+              {transcript || "Comienza a hablar ahora..."}
+            </p>
+          </div>
+        )}
+
+        {/* Indicador de procesamiento IA */}
+        {structuring && (
+          <div className="flex items-center gap-2 text-xs text-teal-800 dark:text-teal-200 p-2.5 rounded-xl bg-teal-100/70 dark:bg-teal-900/50 border border-teal-300">
+            <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+            La IA está estructurando la historia clínica en los campos del formulario abajo...
+          </div>
+        )}
+      </div>
+
       <div className="space-y-1.5">
         <Label>Fecha</Label>
         <Input
@@ -215,15 +392,76 @@ export function ConsultationForm({
       </div>
 
       <div className="space-y-2 col-span-2">
-        <Label>Motivo</Label>
-        <Input name="reason" required defaultValue={d.reason ?? ""} placeholder="Ej. Control general, vómitos, vacunación..." />
+        <Label>Motivo de consulta</Label>
+        <Input
+          name="reason"
+          required
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Ej. Control general, vómitos, cojera..."
+        />
       </div>
-      <div className="space-y-2"><Label>Peso (kg)</Label><Input name="weight" type="number" step="0.1" defaultValue={defaultPet?.weight || ""} /></div>
-      <div className="space-y-2"><Label>Temperatura (°C)</Label><Input name="temperature" type="number" step="0.1" placeholder="Ej. 38.5" /></div>
-      <div className="space-y-2 col-span-2"><Label>Diagnóstico</Label><Textarea name="diagnosis" rows={2} placeholder="Diagnóstico presuntivo o definitivo..." /></div>
-      <div className="space-y-2 col-span-2"><Label>Tratamiento</Label><Textarea name="treatment" rows={2} placeholder="Tratamiento administrado e indicaciones..." /></div>
-      <div className="space-y-2 col-span-2"><Label>Medicamentos</Label><Input name="medications" placeholder="Medicamentos recetados..." /></div>
-      <div className="space-y-2 col-span-2"><Label>Observaciones</Label><Textarea name="notes" rows={2} placeholder="Observaciones adicionales o seguimiento..." /></div>
+      <div className="space-y-2">
+        <Label>Peso (kg)</Label>
+        <Input
+          name="weight"
+          type="number"
+          step="0.1"
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+          placeholder="Ej. 12.5"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Temperatura (°C)</Label>
+        <Input
+          name="temperature"
+          type="number"
+          step="0.1"
+          value={temperature}
+          onChange={(e) => setTemperature(e.target.value)}
+          placeholder="Ej. 38.5"
+        />
+      </div>
+      <div className="space-y-2 col-span-2">
+        <Label>Diagnóstico</Label>
+        <Textarea
+          name="diagnosis"
+          rows={2}
+          value={diagnosis}
+          onChange={(e) => setDiagnosis(e.target.value)}
+          placeholder="Diagnóstico presuntivo o definitivo..."
+        />
+      </div>
+      <div className="space-y-2 col-span-2">
+        <Label>Tratamiento aplicado / pautas</Label>
+        <Textarea
+          name="treatment"
+          rows={2}
+          value={treatment}
+          onChange={(e) => setTreatment(e.target.value)}
+          placeholder="Tratamiento administrado en clínica, curaciones..."
+        />
+      </div>
+      <div className="space-y-2 col-span-2">
+        <Label>Medicamentos y Receta</Label>
+        <Input
+          name="medications"
+          value={medications}
+          onChange={(e) => setMedications(e.target.value)}
+          placeholder="Ej. Amoxicilina 250mg c/12h x 7 días, Meloxicam..."
+        />
+      </div>
+      <div className="space-y-2 col-span-2">
+        <Label>Observaciones y Recomendaciones</Label>
+        <Textarea
+          name="notes"
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Observaciones adicionales, control en X días, signos de alarma..."
+        />
+      </div>
       <DialogFooter className="col-span-2">
         <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
         <Button type="submit">{submitLabel}</Button>
@@ -231,4 +469,3 @@ export function ConsultationForm({
     </form>
   );
 }
-

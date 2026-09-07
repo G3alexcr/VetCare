@@ -195,3 +195,89 @@ No se ha detectado una **API Key** configurada para esta clínica.
     if (!out) throw new Error("OpenAI no devolvió contenido.");
     return { text: out };
   });
+
+export type StructuredConsultation = {
+  reason: string;
+  weight?: number;
+  temperature?: number;
+  diagnosis: string;
+  treatment: string;
+  medications: string;
+  notes: string;
+};
+
+export const structureConsultationVoice = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        transcript: z.string(),
+        petContext: z.string().optional(),
+        provider: z.enum(["openai", "gemini", "claude"]).default("openai"),
+        apiKey: z.string().optional(),
+        model: z.string().optional(),
+      })
+      .parse(input)
+  )
+  .handler(async ({ data }) => {
+    const system = `Eres un asistente clínico veterinario de élite. Tu trabajo es recibir la transcripción oral o dictado que un médico veterinario hace mientras examina a un paciente (o después de la consulta), y extraer y estructurar la información médica directamente para la historia clínica.
+Debes responder EXCLUSIVAMENTE con un JSON válido (sin markdown, sin explicaciones, sin comillas invertidas) con las siguientes claves:
+{
+  "reason": "Motivo de la consulta (ej. 'Vómitos y decaimiento de 48h')",
+  "weight": número o null si no se mencionó,
+  "temperature": número o null si no se mencionó,
+  "diagnosis": "Diagnóstico presuntivo o definitivo estructurado con terminología clínica",
+  "treatment": "Procedimientos realizados o plan de tratamiento",
+  "medications": "Medicamentos recetados con dosis y frecuencia",
+  "notes": "Observaciones clínicas adicionales, constantes o recomendaciones de control"
+}`;
+
+    const prompt = `${data.petContext ? `Datos del paciente: ${data.petContext}\n\n` : ""}Dictado del veterinario:\n"${data.transcript}"\n\nGenera el JSON estructurado:`;
+
+    const res = await runVetCareAI({
+      data: {
+        system,
+        prompt,
+        provider: data.provider,
+        apiKey: data.apiKey,
+        model: data.model,
+        temperature: 0.1,
+        maxTokens: 1024,
+      },
+    });
+
+    let raw = res.text.trim();
+    if (raw.startsWith("```json")) raw = raw.slice(7);
+    if (raw.startsWith("```")) raw = raw.slice(3);
+    if (raw.endsWith("```")) raw = raw.slice(0, -3);
+    raw = raw.trim();
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<StructuredConsultation>;
+      return {
+        success: true,
+        data: {
+          reason: String(parsed.reason ?? ""),
+          weight: typeof parsed.weight === "number" ? parsed.weight : undefined,
+          temperature: typeof parsed.temperature === "number" ? parsed.temperature : undefined,
+          diagnosis: String(parsed.diagnosis ?? ""),
+          treatment: String(parsed.treatment ?? ""),
+          medications: String(parsed.medications ?? ""),
+          notes: String(parsed.notes ?? ""),
+        },
+      };
+    } catch (err) {
+      console.error("Failed to parse structured JSON:", raw, err);
+      return {
+        success: false,
+        raw,
+        data: {
+          reason: data.transcript.slice(0, 100),
+          notes: data.transcript,
+          diagnosis: "",
+          treatment: "",
+          medications: "",
+        },
+      };
+    }
+  });
+
