@@ -46,6 +46,8 @@ import { usePets } from "@/lib/pets-store";
 import { useVeterinarios } from "@/lib/veterinarios-store";
 import {
   useAppointments,
+  useConsultations,
+  type LinkedConsultation,
   addAppointment,
   updateAppointmentStatus,
   addConsultationFromAppointment,
@@ -53,7 +55,8 @@ import {
 } from "@/lib/store";
 import { toLocalDateStr } from "@/lib/utils";
 import { toast } from "sonner";
-import { Receipt, Mail } from "lucide-react";
+import { Receipt, Mail, Pencil } from "lucide-react";
+import { ConsultationDetailDialog } from "@/components/consultation-detail";
 import { AppointmentEmailDialog } from "@/components/appointment-email-dialog";
 import type { AppointmentEmailData } from "@/lib/email-templates";
 import { useCurrentClinicId } from "@/lib/saas-store";
@@ -88,6 +91,7 @@ const statuses: AppointmentStatus[] = [
 function AgendaPage() {
   const clinicId = useCurrentClinicId();
   const appointments = useAppointments();
+  const consultations = useConsultations();
   const clientes = useClientes();
   const pets = usePets();
   const vets = useVeterinarios();
@@ -95,6 +99,7 @@ function AgendaPage() {
   const [open, setOpen] = useState(false);
   const [defaultTime, setDefaultTime] = useState("09:00");
   const [startConsultFor, setStartConsultFor] = useState<Appointment | null>(null);
+  const [detailConsult, setDetailConsult] = useState<LinkedConsultation | null>(null);
   const [payData, setPayData] = useState<PayConsultationData | null>(null);
   const [emailAppointmentData, setEmailAppointmentData] = useState<AppointmentEmailData | null>(null);
 
@@ -811,6 +816,28 @@ function AgendaPage() {
                               </Button>
                             )}
 
+                            {/* Ver / Editar consulta médica */}
+                            {(a.status === "Finalizada" || a.status === "En atención") && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1.5 font-medium border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-800 dark:text-teal-300 shadow-xs"
+                                onClick={() => {
+                                  const c = consultations.find(
+                                    (item) => item.appointmentId === a.id || (item.petId === a.petId && item.date === a.date)
+                                  );
+                                  if (c) {
+                                    setDetailConsult(c);
+                                  } else {
+                                    setStartConsultFor(a);
+                                  }
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-teal-600" />
+                                Editar Consulta
+                              </Button>
+                            )}
+
                             {/* Status Selector */}
                             <Select
                               value={a.status}
@@ -1125,6 +1152,13 @@ function AgendaPage() {
           if (!open) setEmailAppointmentData(null);
         }}
         data={emailAppointmentData}
+      />
+
+      {/* Diálogo para ver / editar consulta médica registrada */}
+      <ConsultationDetailDialog
+        consultation={detailConsult}
+        onClose={() => setDetailConsult(null)}
+        initialEditing
       />
     </div>
   );

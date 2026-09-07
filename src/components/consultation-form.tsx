@@ -23,6 +23,12 @@ export type ConsultationFormDefaults = {
   petId?: string;
   clientId?: string;
   reason?: string;
+  weight?: number;
+  temperature?: number;
+  diagnosis?: string;
+  treatment?: string;
+  medications?: string;
+  notes?: string;
 };
 
 export function ConsultationForm({
@@ -66,14 +72,14 @@ export function ConsultationForm({
   const initialPetId = d.petId || availablePets[0]?.id || pets[0]?.id || "";
   const [selectedPetId, setSelectedPetId] = useState<string>(initialPetId);
 
-  // Estados de los campos de la consulta médica (para auto-llenado por voz con IA)
+  // Estados de los campos de la consulta médica (para auto-llenado por voz con IA y edición)
   const [reason, setReason] = useState<string>(d.reason ?? "");
-  const [weight, setWeight] = useState<string>(defaultPet?.weight ? String(defaultPet.weight) : "");
-  const [temperature, setTemperature] = useState<string>("");
-  const [diagnosis, setDiagnosis] = useState<string>("");
-  const [treatment, setTreatment] = useState<string>("");
-  const [medications, setMedications] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
+  const [weight, setWeight] = useState<string>(d.weight !== undefined ? String(d.weight) : defaultPet?.weight ? String(defaultPet.weight) : "");
+  const [temperature, setTemperature] = useState<string>(d.temperature !== undefined ? String(d.temperature) : "");
+  const [diagnosis, setDiagnosis] = useState<string>(d.diagnosis ?? "");
+  const [treatment, setTreatment] = useState<string>(d.treatment ?? "");
+  const [medications, setMedications] = useState<string>(d.medications ?? "");
+  const [notes, setNotes] = useState<string>(d.notes ?? "");
 
   // Estado del dictado por voz y estructuración
   const [recording, setRecording] = useState(false);

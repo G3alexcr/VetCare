@@ -12,6 +12,7 @@ import {
   Clock3,
   Activity,
   Play,
+  Pencil,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ function ConsultationsPage() {
   const [openNew, setOpenNew] = useState(false);
   const [attendingAppt, setAttendingAppt] = useState<any | null>(null);
   const [detail, setDetail] = useState<LinkedConsultation | null>(null);
+  const [isEditingDetail, setIsEditingDetail] = useState(false);
   const [payData, setPayData] = useState<PayConsultationData | null>(null);
   const [emailData, setEmailData] = useState<ConsultationEmailData | null>(null);
   const [search, setSearch] = useState("");
@@ -471,6 +473,19 @@ function ConsultationsPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="h-7 text-xs rounded-lg gap-1 border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-800 dark:text-teal-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetail(c);
+                              setIsEditingDetail(true);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-teal-600" />
+                            <span>Editar</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             className="h-7 text-xs rounded-lg gap-1 border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -623,7 +638,14 @@ function ConsultationsPage() {
       />
 
       {/* Detail Dialog */}
-      <ConsultationDetailDialog consultation={detail} onClose={() => setDetail(null)} />
+      <ConsultationDetailDialog
+        consultation={detail}
+        onClose={() => {
+          setDetail(null);
+          setIsEditingDetail(false);
+        }}
+        initialEditing={isEditingDetail}
+      />
 
       {/* Email Dialog */}
       <ConsultationEmailDialog
