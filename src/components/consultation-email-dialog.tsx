@@ -68,6 +68,10 @@ export function ConsultationEmailDialog({
         } else {
           setSentSuccess(true);
           toast.success(`✓ Correo enviado exitosamente a ${recipientEmail}`);
+          setTimeout(() => {
+            onOpenChange(false);
+            setSentSuccess(false);
+          }, 500);
         }
       } else {
         toast.error(res.error || "No se pudo despachar el correo");
