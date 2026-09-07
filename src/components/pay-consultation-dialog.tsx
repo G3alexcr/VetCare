@@ -1,15 +1,15 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { finance, formatCRC, type FinancePaymentMethod } from "@/lib/finance-store";
 import { addMovement, getOpenSession } from "@/lib/billing-store";
-import { Receipt, User, HeartPulse, Building2, Send } from "lucide-react";
+import { Receipt, User, HeartPulse, Building2, CheckCircle2, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
 
 export type PayConsultationData = {
   clientName: string;
@@ -35,8 +35,7 @@ export function PayConsultationDialog({
   const [amount, setAmount] = useState<number>(data?.defaultAmount || 15000);
   const [method, setMethod] = useState<FinancePaymentMethod>("Efectivo");
   const [reference, setReference] = useState("");
-  const [createdInvoiceNum, setCreatedInvoiceNum] = useState<string | null>(null);
-  const [pendingSentNum, setPendingSentNum] = useState<string | null>(null);
+  const [mode, setMode] = useState<"reception" | "direct">("reception");
 
   if (!data) return null;
 
@@ -80,9 +79,9 @@ export function PayConsultationDialog({
       });
     }
 
-    setCreatedInvoiceNum(inv.number);
-    toast.success(`Factura ${inv.number} generada y cobrada con éxito`);
+    toast.success(`✓ Factura ${inv.number} cobrada exitosamente`);
     if (onSuccess) onSuccess();
+    onOpenChange(false);
   };
 
   // Opción 2: Enviar orden de cobro a recepción/caja para que la cobre la recepcionista
@@ -109,166 +108,130 @@ export function PayConsultationDialog({
       notes: `Atención médica de ${data.petName || "paciente"} enviada para cobro en recepción.`,
     });
 
-    setPendingSentNum(inv.number);
-    toast.success(`Orden de cobro ${inv.number} enviada a Recepción / Caja`);
+    toast.success(`✓ Orden de cobro ${inv.number} enviada a Recepción y Punto de Venta`);
     if (onSuccess) onSuccess();
+    onOpenChange(false);
   };
 
   const handleClose = () => {
-    setCreatedInvoiceNum(null);
-    setPendingSentNum(null);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Receipt className="h-5 w-5 text-emerald-600" />
-            {createdInvoiceNum
-              ? "Comprobante de Pago Generado"
-              : pendingSentNum
-              ? "Orden Enviada a Recepción"
-              : "Cobro de Atención Médica"}
+      <DialogContent className="sm:max-w-lg p-6 space-y-4">
+        <DialogHeader className="pb-2 border-b">
+          <DialogTitle className="flex items-center gap-2 text-base font-bold">
+            <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 grid place-items-center">
+              <Receipt className="h-4 w-4" />
+            </div>
+            Cobro de Atención Médica
           </DialogTitle>
         </DialogHeader>
 
-        {createdInvoiceNum ? (
-          <div className="space-y-4 py-2 text-center sm:text-left">
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-900">Factura emitida y cancelada:</span>
-                <Badge className="bg-emerald-700 text-white font-mono font-bold">
-                  {createdInvoiceNum}
-                </Badge>
-              </div>
-              <p className="text-xs text-emerald-800">
-                La consulta ha sido cobrada y registrada en <strong>Facturación</strong> y en el turno de <strong>Caja</strong>.
-              </p>
+        {/* Resumen del Paciente y Tutor */}
+        <div className="bg-muted/40 p-3 rounded-xl border flex items-center justify-between gap-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary grid place-items-center shrink-0">
+              <HeartPulse className="h-4 w-4" />
             </div>
-
-            <div className="p-3 bg-muted/20 rounded-xl border text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Paciente:</span>
-                <span className="font-semibold">{data.petName || "—"}</span>
+            <div className="min-w-0">
+              <div className="font-bold text-foreground truncate">{data.petName || "Mascota"}</div>
+              <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                <User className="h-3 w-3" /> {data.clientName}
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tutor:</span>
-                <span className="font-semibold">{data.clientName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Método de pago:</span>
-                <span className="font-semibold">{method}</span>
-              </div>
-              <div className="flex justify-between text-sm font-bold pt-1 border-t">
-                <span>Total cancelado:</span>
-                <span className="text-emerald-600">{formatCRC(amount)}</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button asChild className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
-                <Link to="/facturacion">Ver en Facturación</Link>
-              </Button>
-              <Button variant="outline" className="flex-1 rounded-xl" onClick={handleClose}>
-                Cerrar
-              </Button>
             </div>
           </div>
-        ) : pendingSentNum ? (
-          <div className="space-y-4 py-2 text-center sm:text-left">
-            <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-sky-900">Orden enviada a recepción:</span>
-                <Badge className="bg-sky-700 text-white font-mono font-bold">
-                  {pendingSentNum}
-                </Badge>
-              </div>
-              <p className="text-xs text-sky-800">
-                Se ha generado la <strong>Factura Pendiente</strong>. La recepción o caja puede cobrarla de inmediato desde <strong>Punto de Venta</strong> o <strong>Facturación</strong>.
-              </p>
-            </div>
+          {data.vetName && (
+            <Badge variant="outline" className="text-[11px] shrink-0 font-medium text-muted-foreground">
+              {data.vetName}
+            </Badge>
+          )}
+        </div>
 
-            <div className="p-3 bg-muted/20 rounded-xl border text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Paciente:</span>
-                <span className="font-semibold">{data.petName || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tutor:</span>
-                <span className="font-semibold">{data.clientName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Estado:</span>
-                <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
-                  Pendiente de cobro
-                </Badge>
-              </div>
-              <div className="flex justify-between text-sm font-bold pt-1 border-t">
-                <span>Total a cobrar en caja:</span>
-                <span className="text-primary font-bold">{formatCRC(amount)}</span>
-              </div>
-            </div>
+        {/* Tabs de Modo: Enviar a Recepción vs Cobrar en Consultorio */}
+        <Tabs value={mode} onValueChange={(v) => setMode(v as "reception" | "direct")} className="w-full">
+          <TabsList className="grid grid-cols-2 w-full h-10 p-1 bg-muted/60">
+            <TabsTrigger value="reception" className="text-xs font-semibold gap-1.5 data-[state=active]:bg-background data-[state=active]:text-primary">
+              <Building2 className="h-3.5 w-3.5" /> Enviar a Recepción
+            </TabsTrigger>
+            <TabsTrigger value="direct" className="text-xs font-semibold gap-1.5 data-[state=active]:bg-background data-[state=active]:text-emerald-600">
+              <Wallet className="h-3.5 w-3.5" /> Cobrar en Consultorio
+            </TabsTrigger>
+          </TabsList>
 
-            <div className="flex gap-2 pt-2">
-              <Button asChild className="flex-1 bg-primary hover:bg-primary/90 text-white rounded-xl">
-                <Link to="/punto-venta">Ir a Punto de Venta</Link>
-              </Button>
-              <Button variant="outline" className="flex-1 rounded-xl" onClick={handleClose}>
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3.5 text-xs sm:text-sm">
-            <div className="p-3 bg-muted/20 border rounded-xl space-y-1 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  <HeartPulse className="h-3.5 w-3.5 text-rose-500" /> Paciente
-                </span>
-                <span className="font-bold text-foreground">{data.petName || "Mascota"}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  <User className="h-3.5 w-3.5" /> Tutor
-                </span>
-                <span className="font-semibold text-foreground">{data.clientName}</span>
-              </div>
-              {data.vetName && (
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Médico tratante:</span>
-                  <span>{data.vetName}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Concepto</Label>
-              <Input
-                value={concept}
-                onChange={(e) => setConcept(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
+          {/* Modo 1: Enviar a Recepción */}
+          <TabsContent value="reception" className="space-y-4 pt-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Monto Total (₡)</Label>
+                <Label className="text-xs font-semibold">Monto de la Consulta (₡)</Label>
                 <Input
                   type="number"
                   min={0}
                   step={500}
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value) || 0)}
-                  className="h-9 text-xs font-bold"
+                  className="h-10 text-sm font-bold"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Concepto</Label>
+                <Input
+                  value={concept}
+                  onChange={(e) => setConcept(e.target.value)}
+                  className="h-10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs space-y-1 text-sky-900 dark:text-sky-200">
+              <div className="font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-sky-600" /> Cobro en Recepción / Caja
+              </div>
+              <p className="text-[11px] text-sky-700 dark:text-sky-300">
+                La orden de cobro aparecerá inmediatamente en <strong>Punto de Venta</strong>, <strong>Caja</strong> y <strong>Facturación</strong> para que el cliente pague al salir con su recepcionista.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                className="text-xs text-muted-foreground"
+              >
+                Omitir
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSendToReception}
+                className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs h-10 px-4 rounded-xl shadow-xs"
+              >
+                <Building2 className="h-4 w-4 mr-1.5" /> Enviar a Recepción ({formatCRC(amount)})
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* Modo 2: Cobrar Aquí */}
+          <TabsContent value="direct" className="space-y-3.5 pt-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Monto Total (₡)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={500}
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                  className="h-10 text-sm font-bold"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Método (Si cobra aquí)</Label>
+                <Label className="text-xs font-semibold">Método de Pago</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v as FinancePaymentMethod)}>
-                  <SelectTrigger className="h-9 text-xs font-medium">
+                  <SelectTrigger className="h-10 text-xs font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -281,13 +244,22 @@ export function PayConsultationDialog({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Concepto</Label>
+              <Input
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
             {(method === "SINPE" || method === "Transferencia" || method === "Tarjeta") && (
-              <div className="space-y-1.5 animate-in fade-in-50">
-                <Label className="text-xs">N° Comprobante / Referencia (opcional)</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">N° Comprobante / Referencia (opcional)</Label>
                 <Input
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
-                  placeholder="Ej: Ref #123456 o últimos 4 dígitos"
+                  placeholder="Ej: Ref #123456"
                   className="h-9 text-xs"
                 />
               </div>
@@ -308,38 +280,26 @@ export function PayConsultationDialog({
               </div>
             </div>
 
-            <DialogFooter className="pt-2 border-t flex flex-col sm:flex-row gap-2 justify-between items-center">
+            <div className="flex items-center justify-between pt-2 border-t gap-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={handleClose}
-                className="rounded-xl text-xs text-muted-foreground w-full sm:w-auto"
+                className="text-xs text-muted-foreground"
               >
                 Omitir
               </Button>
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSendToReception}
-                  className="rounded-xl border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-950/40 text-xs font-semibold h-9"
-                  title="Envía la orden a recepción para que el tutor pague en caja"
-                >
-                  <Building2 className="h-4 w-4 mr-1.5" /> Enviar a Recepción / Caja
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleConfirm}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs h-9 shadow-sm"
-                  title="Registra el cobro y pago inmediatamente en consultorio"
-                >
-                  <Receipt className="h-4 w-4 mr-1.5" /> Cobrar Ahora ({formatCRC(amount)})
-                </Button>
-              </div>
-            </DialogFooter>
-          </div>
-        )}
+              <Button
+                type="button"
+                onClick={handleConfirm}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-10 px-4 rounded-xl shadow-xs"
+              >
+                <Receipt className="h-4 w-4 mr-1.5" /> Cobrar y Emitir Factura ({formatCRC(amount)})
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

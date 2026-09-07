@@ -37,6 +37,12 @@ import {
 } from "@/lib/billing-store";
 import { useAuth } from "@/lib/auth";
 import { toLocalDateStr } from "@/lib/utils";
+import {
+  finance,
+  useFinanceInvoices,
+  type FinanceInvoice,
+  type FinancePaymentMethod,
+} from "@/lib/finance-store";
 
 export const Route = createFileRoute("/_app/caja")({
   head: () => ({ meta: [{ title: "Caja y Facturación — VetCare" }] }),
@@ -57,6 +63,36 @@ function CajaPage() {
   const currentBalance = openSession ? calcSessionBalance(openSession.id) : 0;
   const avgTicket = todayInvoices.length ? Math.round(salesToday / todayInvoices.length) : 0;
 
+  const financeInvoices = useFinanceInvoices();
+  const pendingOrders = useMemo(
+    () => financeInvoices.filter((i) => i.status === "Pendiente"),
+    [financeInvoices]
+  );
+  const [payPendingInv, setPayPendingInv] = useState<FinanceInvoice | null>(null);
+  const [payMethod, setPayMethod] = useState<FinancePaymentMethod>("Efectivo");
+  const [payRef, setPayRef] = useState("");
+
+  const handlePayOrder = () => {
+    if (!payPendingInv) return;
+    finance.registerPayment({
+      invoiceId: payPendingInv.id,
+      method: payMethod,
+      amount: payPendingInv.balance,
+      reference: payRef.trim() || undefined,
+    });
+    if (openSession && payMethod === "Efectivo") {
+      addMovement({
+        sessionId: openSession.id,
+        type: "Ingreso",
+        concept: `Cobro Consulta ${payPendingInv.number} - ${payPendingInv.petName || payPendingInv.clientName}`,
+        amount: payPendingInv.balance,
+      });
+    }
+    toast.success(`✓ Consulta de ${payPendingInv.petName || payPendingInv.clientName} cobrada con éxito`);
+    setPayPendingInv(null);
+    setPayRef("");
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -70,6 +106,144 @@ function CajaPage() {
         <KPI icon={<Receipt className="h-4 w-4" />} label="Facturas hoy" value={todayInvoices.length} accent="bg-violet-100 text-violet-700" />
         <KPI icon={<TrendingUp className="h-4 w-4" />} label="Ticket promedio" value={formatCRC(avgTicket)} accent="bg-amber-100 text-amber-700" />
       </div>
+
+      {/* Consultas enviadas desde Consultorios pendientes de cobro */}
+      {pendingOrders.length > 0 && (
+        <Card className="p-4 bg-sky-500/[0.04] border border-sky-200 dark:border-sky-900 rounded-xl space-y-3 shadow-xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+              </span>
+              <span className="font-bold text-sm text-foreground">
+                Órdenes de Consulta pendientes de cobro ({pendingOrders.length})
+              </span>
+            </div>
+            <Badge variant="outline" className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300 text-xs font-semibold">
+              Enviadas a Recepción / Caja
+            </Badge>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {pendingOrders.map((inv) => (
+              <div
+                key={inv.id}
+                className="p-3 bg-card border rounded-xl flex flex-col justify-between gap-2.5 shadow-xs hover:border-primary/40 transition"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-sm text-foreground truncate">
+                      {inv.petName ? `${inv.petName} (${inv.clientName})` : inv.clientName}
+                    </span>
+                    <Badge variant="secondary" className="font-mono text-[10px]">
+                      {inv.number}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {inv.items[0]?.description || "Consulta médica"}
+                  </div>
+                  {inv.vetName && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Atendido por Dr(a). {inv.vetName}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t mt-1">
+                  <span className="font-bold text-base text-primary">
+                    {formatCRC(inv.balance)}
+                  </span>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      setPayPendingInv(inv);
+                      setPayMethod("Efectivo");
+                      setPayRef("");
+                    }}
+                  >
+                    Cobrar en Caja
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Modal de cobro rápido para Caja */}
+      <Dialog open={payPendingInv !== null} onOpenChange={(o) => { if (!o) setPayPendingInv(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Receipt className="h-5 w-5 text-emerald-600" />
+              Cobrar Orden: {payPendingInv?.petName || payPendingInv?.clientName}
+            </DialogTitle>
+          </DialogHeader>
+
+          {payPendingInv && (
+            <div className="space-y-4 pt-2">
+              <div className="p-3 bg-muted/30 rounded-xl border text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tutor:</span>
+                  <span className="font-semibold">{payPendingInv.clientName}</span>
+                </div>
+                {payPendingInv.petName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Paciente:</span>
+                    <span className="font-semibold">{payPendingInv.petName}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-sm pt-1 border-t">
+                  <span>Total a Pagar:</span>
+                  <span className="text-emerald-600 font-bold">{formatCRC(payPendingInv.balance)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Método de Pago</Label>
+                <Select value={payMethod} onValueChange={(v) => setPayMethod(v as FinancePaymentMethod)}>
+                  <SelectTrigger className="h-10 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Efectivo">💵 Efectivo</SelectItem>
+                    <SelectItem value="Tarjeta">💳 Tarjeta (POS)</SelectItem>
+                    <SelectItem value="SINPE">📱 SINPE Móvil</SelectItem>
+                    <SelectItem value="Transferencia">🏦 Transferencia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(payMethod === "SINPE" || payMethod === "Tarjeta" || payMethod === "Transferencia") && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">N° Comprobante / Referencia (opcional)</Label>
+                  <Input
+                    value={payRef}
+                    onChange={(e) => setPayRef(e.target.value)}
+                    placeholder="Ej: Ref #123456"
+                    className="h-10 text-xs"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button variant="outline" size="sm" onClick={() => setPayPendingInv(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  onClick={handlePayOrder}
+                >
+                  Confirmar Cobro ({formatCRC(payPendingInv.balance)})
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="caja">
         <TabsList>
