@@ -23,8 +23,11 @@ import { CURRENCIES, formatMoney, setCurrency, useCurrency, type Currency } from
 import { useStorageUsage, formatBytes } from "@/lib/storage";
 import {
   Building2, Users, Package, TrendingUp, HardDrive, PawPrint, Plus, Edit, Trash2, Instagram, Facebook, Globe, Coins, Rocket,
+  Mail, KeyRound, ExternalLink, CheckCircle2, AlertTriangle, Send, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getClinicEmailConfig, saveClinicEmailConfig, type ClinicEmailConfig } from "@/lib/clinic-email-store";
+import { sendTestEmailFn } from "@/lib/email.functions";
 
 export const Route = createFileRoute("/_app/configuracion")({
   head: () => ({ meta: [{ title: "Configuración — VetCare" }] }),
@@ -69,6 +72,7 @@ function SettingsPage() {
       <Tabs defaultValue="clinic">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="clinic"><Building2 className="h-4 w-4 mr-1.5" />Clínica</TabsTrigger>
+          <TabsTrigger value="email"><Mail className="h-4 w-4 mr-1.5" />Correos / Resend</TabsTrigger>
           <TabsTrigger value="team"><Users className="h-4 w-4 mr-1.5" />Equipo</TabsTrigger>
           <TabsTrigger value="subscription"><Package className="h-4 w-4 mr-1.5" />Suscripción</TabsTrigger>
           <TabsTrigger value="money"><Coins className="h-4 w-4 mr-1.5" />Moneda</TabsTrigger>
@@ -76,6 +80,10 @@ function SettingsPage() {
         </TabsList>
 
         <TabsContent value="clinic" className="mt-4"><ClinicForm clinic={clinic} /></TabsContent>
+
+        <TabsContent value="email" className="mt-4">
+          <EmailSettingsCard clinicId={clinicId} clinicName={clinic.name} userEmail={user?.email || "alxndrgm@gmail.com"} />
+        </TabsContent>
 
         <TabsContent value="team" className="mt-4">
           <TeamCard users={clinicUsers} clinicId={clinicId} currentUserId={user?.id} />
@@ -339,3 +347,178 @@ function CurrencyCard() {
     </Card>
   );
 }
+
+function EmailSettingsCard({ clinicId, clinicName, userEmail }: { clinicId: string; clinicName: string; userEmail: string }) {
+  const [config, setConfig] = useState<ClinicEmailConfig>(() => getClinicEmailConfig(clinicId));
+  const [testEmail, setTestEmail] = useState(userEmail || "alxndrgm@gmail.com");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+
+  const handleSave = () => {
+    saveClinicEmailConfig(clinicId, config);
+    toast.success("Configuración de correo guardada con éxito");
+  };
+
+  const handleTestConnection = async () => {
+    if (!config.resendApiKey.trim()) {
+      toast.error("Ingresa tu clave de Resend (empieza por re_...)");
+      return;
+    }
+    if (!testEmail || !testEmail.includes("@")) {
+      toast.error("Ingresa un correo destinatario válido para la prueba");
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await sendTestEmailFn({
+        data: {
+          toEmail: testEmail.trim(),
+          apiKey: config.resendApiKey.trim(),
+          fromName: config.senderName.trim() || clinicName,
+          fromEmail: config.senderEmail.trim() || "onboarding@resend.dev",
+        },
+      });
+
+      if (res.success) {
+        setTestResult({ success: true, message: res.message });
+        toast.success(res.message);
+      } else {
+        setTestResult({ success: false, error: res.error });
+        toast.error(res.error);
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, error: err?.message || "Error al conectar con Resend" });
+      toast.error(err?.message || "Error al probar conexión");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const isConfigured = Boolean(config.resendApiKey && config.resendApiKey.startsWith("re_"));
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-6 space-y-5 border shadow-sm">
+        <div className="flex items-start justify-between flex-wrap gap-3 pb-3 border-b">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              <h2 className="font-bold text-lg">Servicio de Correos Electrónicos (Resend)</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Configura la clave API de Resend exclusiva de esta veterinaria para el despacho automático de citas y consultas.
+            </p>
+          </div>
+          <div>
+            {isConfigured ? (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 gap-1 text-xs py-1">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Clave Configurada
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 gap-1 text-xs py-1">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Sin Clave de Envío
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Credentials Form */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-2 sm:col-span-2">
+            <Label className="flex items-center gap-1.5 text-sm font-semibold">
+              <KeyRound className="h-4 w-4 text-primary" /> Resend API Key (re_...)
+            </Label>
+            <Input
+              type="password"
+              value={config.resendApiKey}
+              onChange={(e) => setConfig({ ...config, resendApiKey: e.target.value })}
+              placeholder="re_123456789_abcdefghijklmnopqrstuvwxyz"
+              className="font-mono text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Obtén tu clave gratis (3,000 correos/mes) registrándote en{" "}
+              <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-primary underline font-medium inline-flex items-center gap-0.5">
+                resend.com <ExternalLink className="h-2.5 w-2.5" />
+              </a>{" "}
+              → pestaña <strong>API Keys</strong> → <strong>Create API Key</strong>.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Nombre del Remitente</Label>
+            <Input
+              value={config.senderName}
+              onChange={(e) => setConfig({ ...config, senderName: e.target.value })}
+              placeholder={clinicName || "VetCare Clínica Veterinaria"}
+            />
+            <p className="text-[11px] text-muted-foreground">Nombre que verán tus clientes al recibir el correo.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Correo Remitente</Label>
+            <Input
+              value={config.senderEmail}
+              onChange={(e) => setConfig({ ...config, senderEmail: e.target.value })}
+              placeholder="onboarding@resend.dev"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Usa <code>onboarding@resend.dev</code> para pruebas, o tu correo/dominio verificado en Resend.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} className="font-semibold shadow-xs">
+            Guardar Configuración de Correo
+          </Button>
+        </div>
+      </Card>
+
+      {/* Connection Verification Card */}
+      <Card className="p-6 space-y-4 border bg-muted/20">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-emerald-600" />
+          <h3 className="font-semibold text-base">Comprobador de Conexión en Vivo</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Ingresa un correo electrónico y haz clic en <strong>Probar Conexión</strong>. El sistema enviará un mensaje de prueba inmediato usando tu clave API para verificar que todo esté funcionando al 100%.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+          <Input
+            type="email"
+            value={testEmail}
+            onChange={(e) => setTestEmail(e.target.value)}
+            placeholder="tu-correo@gmail.com"
+            className="sm:max-w-md bg-card"
+          />
+          <Button
+            onClick={handleTestConnection}
+            disabled={testing}
+            variant="outline"
+            className="border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 gap-1.5 font-medium"
+          >
+            {testing ? "Enviando prueba..." : <><Send className="h-4 w-4 text-emerald-600" /> Probar Conexión Ahora</>}
+          </Button>
+        </div>
+
+        {testResult && (
+          <div className={`p-4 rounded-xl text-xs border ${
+            testResult.success
+              ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
+          }`}>
+            <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
+              {testResult.success ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-rose-600" />}
+              {testResult.success ? "¡Prueba Exitosa!" : "Error al conectar con Resend"}
+            </div>
+            <p>{testResult.message || testResult.error}</p>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+

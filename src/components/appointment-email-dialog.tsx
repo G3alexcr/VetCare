@@ -8,6 +8,8 @@ import { Mail, Send, CheckCircle2, Eye, ExternalLink, Copy } from "lucide-react"
 import { toast } from "sonner";
 import { sendAppointmentEmailFn } from "@/lib/email.functions";
 import { renderAppointmentEmailHtml, type AppointmentEmailData } from "@/lib/email-templates";
+import { useCurrentClinicId } from "@/lib/saas-store";
+import { getClinicEmailConfig } from "@/lib/clinic-email-store";
 
 export function AppointmentEmailDialog({
   open,
@@ -18,6 +20,7 @@ export function AppointmentEmailDialog({
   onOpenChange: (open: boolean) => void;
   data: AppointmentEmailData | null;
 }) {
+  const clinicId = useCurrentClinicId();
   const [recipientEmail, setRecipientEmail] = useState(data?.clientEmail || "");
   const [sending, setSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
@@ -43,18 +46,28 @@ export function AppointmentEmailDialog({
       return;
     }
 
+    const emailCfg = getClinicEmailConfig(clinicId);
+
     setSending(true);
     try {
       const res = await sendAppointmentEmailFn({
-        data: currentEmailData,
+        data: {
+          ...currentEmailData,
+          apiKey: emailCfg.resendApiKey,
+          fromName: emailCfg.senderName,
+          fromEmail: emailCfg.senderEmail,
+        },
       });
 
       if (res.success) {
-        setSentSuccess(true);
         if (res.mocked) {
-          toast.success(`✓ Confirmación de cita generada para ${recipientEmail}`);
+          toast.warning(
+            `Atención: No hay clave de correo configurada en el servidor. El correo no fue despachado a la bandeja de ${recipientEmail}. Usa el botón "Abrir en Gmail Web" para enviarlo de inmediato.`,
+            { duration: 8000 }
+          );
         } else {
-          toast.success(`✓ Correo de cita enviado a ${recipientEmail}`);
+          setSentSuccess(true);
+          toast.success(`✓ Correo de cita enviado exitosamente a ${recipientEmail}`);
         }
       } else {
         toast.error(res.error || "No se pudo despachar el correo");

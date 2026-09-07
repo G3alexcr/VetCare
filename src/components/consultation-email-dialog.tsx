@@ -8,6 +8,8 @@ import { Mail, Send, CheckCircle2, Eye, ExternalLink, MessageCircle, Copy } from
 import { toast } from "sonner";
 import { sendConsultationEmailFn } from "@/lib/email.functions";
 import { renderConsultationEmailHtml, type ConsultationEmailData } from "@/lib/email-templates";
+import { useCurrentClinicId } from "@/lib/saas-store";
+import { getClinicEmailConfig } from "@/lib/clinic-email-store";
 
 export function ConsultationEmailDialog({
   open,
@@ -18,6 +20,7 @@ export function ConsultationEmailDialog({
   onOpenChange: (open: boolean) => void;
   data: ConsultationEmailData | null;
 }) {
+  const clinicId = useCurrentClinicId();
   const [recipientEmail, setRecipientEmail] = useState(data?.clientEmail || "");
   const [sending, setSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
@@ -43,17 +46,27 @@ export function ConsultationEmailDialog({
       return;
     }
 
+    const emailCfg = getClinicEmailConfig(clinicId);
+
     setSending(true);
     try {
       const res = await sendConsultationEmailFn({
-        data: currentEmailData,
+        data: {
+          ...currentEmailData,
+          apiKey: emailCfg.resendApiKey,
+          fromName: emailCfg.senderName,
+          fromEmail: emailCfg.senderEmail,
+        },
       });
 
       if (res.success) {
-        setSentSuccess(true);
         if (res.mocked) {
-          toast.success(`✓ Resumen clínico generado para ${recipientEmail}`);
+          toast.warning(
+            `Atención: No hay clave de correo configurada en el servidor. El correo no fue despachado a la bandeja de ${recipientEmail}. Usa el botón "Abrir en Gmail Web" para enviarlo de inmediato.`,
+            { duration: 8000 }
+          );
         } else {
+          setSentSuccess(true);
           toast.success(`✓ Correo enviado exitosamente a ${recipientEmail}`);
         }
       } else {
