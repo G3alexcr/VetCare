@@ -7,8 +7,10 @@ import type { LinkedConsultation } from "@/lib/store";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Receipt } from "lucide-react";
+import { Receipt, Mail } from "lucide-react";
 import { PayConsultationDialog, type PayConsultationData } from "@/components/pay-consultation-dialog";
+import { ConsultationEmailDialog } from "@/components/consultation-email-dialog";
+import type { ConsultationEmailData } from "@/lib/email-templates";
 
 export function ConsultationDetailDialog({
   consultation,
@@ -26,6 +28,7 @@ export function ConsultationDetailDialog({
   const owner = pet ? clientes.find((cl) => cl.id === pet.clientId) : undefined;
 
   const [payData, setPayData] = useState<PayConsultationData | null>(null);
+  const [emailData, setEmailData] = useState<ConsultationEmailData | null>(null);
 
   return (
     <>
@@ -55,25 +58,50 @@ export function ConsultationDetailDialog({
                 <Block label="Observaciones" value={c.notes || "—"} />
               </div>
 
-              <div className="flex items-center justify-between gap-3 pt-4 border-t mt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t mt-2">
                 <Button variant="outline" onClick={onClose} className="rounded-xl">
                   Cerrar
                 </Button>
-                <Button
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl gap-2 shadow-xs"
-                  onClick={() => {
-                    setPayData({
-                      clientName: owner?.fullName || "Cliente general",
-                      clientId: owner?.id,
-                      petName: pet?.name,
-                      vetName: vet?.nombre,
-                      reason: c.reason,
-                      defaultAmount: 15000,
-                    });
-                  }}
-                >
-                  <Receipt className="h-4 w-4" /> Cobrar y Facturar Consulta
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-xl border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 gap-1.5"
+                    onClick={() => {
+                      setEmailData({
+                        clientName: owner?.fullName || "Tutor",
+                        clientEmail: owner?.email || "",
+                        petName: pet?.name || "Mascota",
+                        petSpecies: pet?.species,
+                        petBreed: pet?.breed,
+                        vetName: vet?.nombre,
+                        date: c.date,
+                        diagnosis: c.diagnosis || c.reason,
+                        treatment: c.treatment || "Seguir indicaciones médicas",
+                        medications: c.medications,
+                        weight: c.weight,
+                        temperature: c.temperature,
+                        notes: c.notes,
+                      });
+                    }}
+                  >
+                    <Mail className="h-4 w-4 text-sky-600" /> Enviar Correo al Tutor
+                  </Button>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl gap-2 shadow-xs"
+                    onClick={() => {
+                      setPayData({
+                        clientName: owner?.fullName || "Cliente general",
+                        clientId: owner?.id,
+                        petName: pet?.name,
+                        vetName: vet?.nombre,
+                        reason: c.reason,
+                        defaultAmount: 15000,
+                      });
+                    }}
+                  >
+                    <Receipt className="h-4 w-4" /> Cobrar y Facturar
+                  </Button>
+                </div>
               </div>
             </>
           )}
@@ -90,6 +118,14 @@ export function ConsultationDetailDialog({
           setPayData(null);
           onClose();
         }}
+      />
+
+      <ConsultationEmailDialog
+        open={emailData !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmailData(null);
+        }}
+        data={emailData}
       />
     </>
   );

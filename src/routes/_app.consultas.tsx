@@ -43,6 +43,9 @@ import { openVetCareAI } from "@/lib/ai-store";
 import { toast } from "sonner";
 import { toLocalDateStr } from "@/lib/utils";
 import { PayConsultationDialog, type PayConsultationData } from "@/components/pay-consultation-dialog";
+import { Mail } from "lucide-react";
+import { ConsultationEmailDialog } from "@/components/consultation-email-dialog";
+import type { ConsultationEmailData } from "@/lib/email-templates";
 
 export const Route = createFileRoute("/_app/consultas")({
   head: () => ({ meta: [{ title: "Consultas y Atención Médica — VetCare" }] }),
@@ -72,6 +75,7 @@ function ConsultationsPage() {
   const [attendingAppt, setAttendingAppt] = useState<any | null>(null);
   const [detail, setDetail] = useState<LinkedConsultation | null>(null);
   const [payData, setPayData] = useState<PayConsultationData | null>(null);
+  const [emailData, setEmailData] = useState<ConsultationEmailData | null>(null);
   const [search, setSearch] = useState("");
 
   const todayStr = useMemo(() => toLocalDateStr(new Date()), []);
@@ -414,17 +418,46 @@ function ConsultationsPage() {
                             {c.date} · {vet?.nombre || "Veterinario"}
                           </div>
                         </div>
-                        <div className="flex gap-3 text-xs text-muted-foreground">
-                          {c.weight > 0 && (
-                            <span>
-                              Peso: <strong>{c.weight} kg</strong>
-                            </span>
-                          )}
-                          {c.temperature > 0 && (
-                            <span>
-                              T°: <strong>{c.temperature}°C</strong>
-                            </span>
-                          )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex gap-2 text-xs text-muted-foreground">
+                            {c.weight > 0 && (
+                              <span>
+                                Peso: <strong>{c.weight} kg</strong>
+                              </span>
+                            )}
+                            {c.temperature > 0 && (
+                              <span>
+                                T°: <strong>{c.temperature}°C</strong>
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs rounded-lg gap-1 border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const owner = pet ? clientes.find((cl) => cl.id === pet.clientId) : undefined;
+                              setEmailData({
+                                clientName: owner?.fullName || "Tutor",
+                                clientEmail: owner?.email || "",
+                                petName: pet?.name || "Mascota",
+                                petSpecies: pet?.species,
+                                petBreed: pet?.breed,
+                                vetName: vet?.nombre,
+                                date: c.date,
+                                diagnosis: c.diagnosis || c.reason,
+                                treatment: c.treatment || "Seguir indicaciones médicas",
+                                medications: c.medications,
+                                weight: c.weight,
+                                temperature: c.temperature,
+                                notes: c.notes,
+                              });
+                            }}
+                          >
+                            <Mail className="h-3.5 w-3.5 text-sky-600" />
+                            <span>Enviar Correo</span>
+                          </Button>
                         </div>
                       </div>
                       <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
@@ -522,6 +555,15 @@ function ConsultationsPage() {
 
       {/* Detail Dialog */}
       <ConsultationDetailDialog consultation={detail} onClose={() => setDetail(null)} />
+
+      {/* Email Dialog */}
+      <ConsultationEmailDialog
+        open={emailData !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmailData(null);
+        }}
+        data={emailData}
+      />
     </div>
   );
 }
