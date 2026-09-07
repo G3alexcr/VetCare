@@ -102,9 +102,11 @@ const SYSTEMS: Record<string, string> = {
     "Analiza el documento o imagen adjunta del paciente y genera en markdown: Resumen, Hallazgos relevantes y " +
     "Observaciones preliminares. Usa lenguaje presuntivo; nunca emitas diagnósticos definitivos a partir del documento.",
   chat:
-    "Actúa como un buscador clínico inteligente del sistema VetCare. Responde las preguntas del personal usando " +
-    "únicamente la información almacenada del expediente proporcionada en el contexto. Si la información solicitada " +
-    "no está registrada, indícalo claramente en lugar de inventarla.",
+    "Eres un copiloto clínico veterinario de alto nivel para médicos veterinarios. Responde con precisión clínica preguntas " +
+    "sobre farmacología veterinaria, dosificaciones exactas (indicando rangos terapéuticos estándar en mg/kg, vía de administración " +
+    "y frecuencia para caninos o felinos), diagnósticos diferenciales, protocolos anestésicos y manejo clínico. " +
+    "Si hay un expediente de paciente seleccionado en el contexto, contextualiza con sus datos (peso, especie, edad). " +
+    "Sé directo, conciso, útil y con criterio profesional veterinario.",
 };
 
 function calcAge(birthDate: string): string {
@@ -396,22 +398,32 @@ function useTTS() {
 
     const fishKey = settings.fishApiKey || currentClinic?.fishAudioApiKey || "";
     const fishVoice = settings.fishVoiceId || currentClinic?.fishAudioVoiceId || "";
+    const openAiKey = settings.apiKey || currentClinic?.aiApiKey || "";
 
-    if (fishKey) {
+    if (fishKey || openAiKey) {
       try {
-        const { runFishAudioTTS } = await import("@/lib/tts.functions");
-        const res = await runFishAudioTTS({ data: { text: clean, apiKey: fishKey, voiceId: fishVoice || undefined } });
+        const { runVoiceTTS } = await import("@/lib/tts.functions");
+        const res = await runVoiceTTS({
+          data: {
+            text: clean,
+            fishApiKey: fishKey || undefined,
+            fishVoiceId: fishVoice || undefined,
+            openAiApiKey: openAiKey || undefined,
+            openAiVoice: "nova",
+          },
+        });
         const audio = new Audio(res.audioDataUrl);
         audioRef.current = audio;
         audio.onended = () => setSpeaking(false);
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error("Audio playback error:", e);
           setSpeaking(false);
           browserSpeak(clean);
         };
-        audio.play();
+        await audio.play();
         return;
-      } catch (err) {
-        console.warn("Fish Audio falló, usando voz del navegador:", err);
+      } catch (err: any) {
+        console.warn("TTS API falló, usando voz del navegador:", err);
       }
     }
 
@@ -423,6 +435,8 @@ function useTTS() {
       setSpeaking(false);
       return;
     }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "es-ES";
     utter.rate = 1.0;
