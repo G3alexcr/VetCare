@@ -50,13 +50,14 @@ import {
   User,
   FileText,
   ArrowRight,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/punto-venta")({ component: PuntoVentaPage });
 
 type CartLine = { productId: string; name: string; unitPrice: number; stock: number; quantity: number; discount: number };
-type Receipt = {
+type PosReceiptData = {
   number: string;
   invoiceNumber?: string;
   clientName: string;
@@ -85,7 +86,7 @@ function PuntoVentaPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [discount, setDiscount] = useState(0);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [receipt, setReceipt] = useState<Receipt>(null);
+  const [receipt, setReceipt] = useState<PosReceiptData>(null);
   const [method, setMethod] = useState<PaymentMethod>("Efectivo");
   const [received, setReceived] = useState<number | undefined>(undefined);
   const [selectedClientId, setSelectedClientId] = useState<string>("mostrador");
