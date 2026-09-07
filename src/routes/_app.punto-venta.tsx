@@ -14,7 +14,12 @@ import { usePlanCapabilities } from "@/lib/saas-store";
 import { PlanGate } from "@/components/plan-gate";
 import { useClientes } from "@/lib/clientes-store";
 import { usePets } from "@/lib/pets-store";
-import { finance, type FinancePaymentMethod } from "@/lib/finance-store";
+import {
+  finance,
+  useFinanceInvoices,
+  type FinanceInvoice,
+  type FinancePaymentMethod,
+} from "@/lib/finance-store";
 import { addMovement, getOpenSession as getBillingOpenSession } from "@/lib/billing-store";
 import { toLocalDateStr } from "@/lib/utils";
 import {
@@ -87,6 +92,37 @@ function PuntoVentaPage() {
   const [selectedPetName, setSelectedPetName] = useState<string>("");
   const [clientName, setClientName] = useState("Cliente de mostrador");
 
+  const invoices = useFinanceInvoices();
+  const pendingInvoices = useMemo(
+    () => invoices.filter((i) => i.status === "Pendiente"),
+    [invoices]
+  );
+  const [payPendingInv, setPayPendingInv] = useState<FinanceInvoice | null>(null);
+  const [payPendingMethod, setPayPendingMethod] = useState<FinancePaymentMethod>("Efectivo");
+  const [payPendingRef, setPayPendingRef] = useState("");
+
+  const confirmPayPending = () => {
+    if (!payPendingInv) return;
+    finance.registerPayment({
+      invoiceId: payPendingInv.id,
+      method: payPendingMethod,
+      amount: payPendingInv.balance,
+      reference: payPendingRef.trim() || undefined,
+    });
+    const openSess = getOpenSession();
+    if (openSess && payPendingMethod === "Efectivo") {
+      addMovement({
+        sessionId: openSess.id,
+        type: "Ingreso",
+        concept: `Cobro Consulta ${payPendingInv.number} - ${payPendingInv.petName || payPendingInv.clientName}`,
+        amount: payPendingInv.balance,
+      });
+    }
+    toast.success(`Factura ${payPendingInv.number} cobrada con éxito en Caja`);
+    setPayPendingInv(null);
+    setPayPendingRef("");
+  };
+
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter((p) => p.estado === "Activo" && (cat === "todas" || p.categoryId === cat) && (!q || [p.name, p.code, p.barcode].some((x) => (x || "").toLowerCase().includes(q))));
@@ -118,6 +154,18 @@ function PuntoVentaPage() {
     if (discount < 0 || discount > subtotal) return toast.error("Descuento inválido");
     const sale = confirmPosSale({ items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, discount: l.discount })), discount, paymentMethod: method, received, clientName });
     if (!sale) return toast.error("No se pudo completar la venta");
+
+    // Liquidar facturas médicas pendientes que fueron añadidas al carrito
+    const linkedInvoices = cart.filter((l) => l.productId.startsWith("inv-"));
+    for (const l of linkedInvoices) {
+      const invId = l.productId.replace("inv-", "");
+      finance.registerPayment({
+        invoiceId: invId,
+        method: (method === "SINPE" ? "SINPE" : method === "Tarjeta" ? "Tarjeta" : method === "Transferencia" ? "Transferencia" : "Efectivo") as FinancePaymentMethod,
+        amount: l.unitPrice * l.quantity,
+      });
+    }
+
     const change = received != null ? Math.max(received - sale.total, 0) : 0;
     setReceipt({ number: sale.number, items: sale.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, lineTotal: i.unitPrice * i.quantity - i.discount })), subtotal: sale.subtotal, discount: sale.discount, tax: sale.tax, total: sale.total, received: received ?? sale.total, change, method: sale.paymentMethod });
     setCart([]);
@@ -146,6 +194,92 @@ function PuntoVentaPage() {
         </div>
 
         <PosNav />
+
+        {/* Banner de Órdenes y Consultas pendientes enviadas desde consultorio */}
+        {pendingInvoices.length > 0 && (
+          <Card className="p-4 bg-sky-500/[0.04] border border-sky-200 dark:border-sky-900 rounded-xl space-y-3 shadow-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                </span>
+                <span className="font-bold text-sm text-foreground">
+                  Consultas y Órdenes pendientes de cobro ({pendingInvoices.length})
+                </span>
+              </div>
+              <Badge variant="outline" className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300 text-xs font-semibold">
+                Enviadas por veterinarios a Recepción
+              </Badge>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {pendingInvoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="p-3 bg-card border rounded-xl flex flex-col justify-between gap-2.5 shadow-xs hover:border-primary/40 transition"
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-sm text-foreground truncate">
+                        {inv.petName ? `${inv.petName} (${inv.clientName})` : inv.clientName}
+                      </span>
+                      <Badge variant="secondary" className="font-mono text-[10px]">
+                        {inv.number}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {inv.items[0]?.description || "Consulta médica"}
+                    </div>
+                    {inv.vetName && (
+                      <div className="text-[11px] text-muted-foreground">
+                        Atendido por Dr(a). {inv.vetName}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t mt-1">
+                    <span className="font-bold text-base text-primary">
+                      {formatMoney(inv.balance, currency)}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs font-medium"
+                        title="Cargar al carrito del POS para sumar productos y cobrar todo junto"
+                        onClick={() => {
+                          setCart((c) => [
+                            ...c,
+                            {
+                              productId: `inv-${inv.id}`,
+                              name: `${inv.items[0]?.description || "Consulta médica"} - ${inv.petName || inv.clientName}`,
+                              unitPrice: inv.balance,
+                              stock: 999,
+                              quantity: 1,
+                              discount: 0,
+                            },
+                          ]);
+                          setClientName(inv.clientName);
+                          toast.success(`Consulta de ${inv.petName || inv.clientName} cargada al carrito`);
+                        }}
+                      >
+                        + Carrito
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => setPayPendingInv(inv)}
+                      >
+                        Cobrar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           {/* Catálogo */}
@@ -423,6 +557,90 @@ function PuntoVentaPage() {
                   </Button>
                 </div>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Cobro Rápido en Recepción / POS para consultas enviadas */}
+      <Dialog open={!!payPendingInv} onOpenChange={(o) => !o && setPayPendingInv(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Receipt className="h-5 w-5 text-emerald-600" />
+              Cobrar Atención Médica en Caja
+            </DialogTitle>
+          </DialogHeader>
+          {payPendingInv && (
+            <div className="space-y-4 py-1 text-sm">
+              <div className="p-3 bg-muted/20 border rounded-xl space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Factura:</span>
+                  <span className="font-mono font-bold">{payPendingInv.number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Paciente:</span>
+                  <span className="font-semibold">{payPendingInv.petName || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tutor:</span>
+                  <span className="font-semibold">{payPendingInv.clientName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Concepto:</span>
+                  <span className="truncate max-w-[200px]">{payPendingInv.items[0]?.description || "Consulta médica"}</span>
+                </div>
+                <div className="flex justify-between font-bold text-sm border-t pt-1">
+                  <span>Total a Cobrar:</span>
+                  <span className="text-emerald-600">{formatMoney(payPendingInv.balance, currency)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Método de Pago</Label>
+                <Select
+                  value={payPendingMethod}
+                  onValueChange={(v) => setPayPendingMethod(v as FinancePaymentMethod)}
+                >
+                  <SelectTrigger className="h-9 text-xs font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Efectivo">💵 Efectivo</SelectItem>
+                    <SelectItem value="Tarjeta">💳 Tarjeta (POS)</SelectItem>
+                    <SelectItem value="SINPE">📱 SINPE Móvil</SelectItem>
+                    <SelectItem value="Transferencia">🏦 Transferencia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(payPendingMethod === "SINPE" ||
+                payPendingMethod === "Tarjeta" ||
+                payPendingMethod === "Transferencia") && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">N° Comprobante / Referencia (opcional)</Label>
+                  <Input
+                    value={payPendingRef}
+                    onChange={(e) => setPayPendingRef(e.target.value)}
+                    placeholder="Ej: Ref #123456 o últimos 4 dígitos"
+                    className="h-9 text-xs"
+                  />
+                </div>
+              )}
+
+              <DialogFooter className="pt-2 border-t flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPayPendingInv(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  onClick={confirmPayPending}
+                >
+                  <Receipt className="h-4 w-4 mr-1.5" /> Confirmar Cobro (
+                  {formatMoney(payPendingInv.balance, currency)})
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>

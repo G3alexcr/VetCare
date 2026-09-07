@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { finance, formatCRC, type FinancePaymentMethod } from "@/lib/finance-store";
 import { addMovement, getOpenSession } from "@/lib/billing-store";
-import { Receipt, User, HeartPulse } from "lucide-react";
+import { Receipt, User, HeartPulse, Building2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 
@@ -36,9 +36,11 @@ export function PayConsultationDialog({
   const [method, setMethod] = useState<FinancePaymentMethod>("Efectivo");
   const [reference, setReference] = useState("");
   const [createdInvoiceNum, setCreatedInvoiceNum] = useState<string | null>(null);
+  const [pendingSentNum, setPendingSentNum] = useState<string | null>(null);
 
   if (!data) return null;
 
+  // Opción 1: Cobrar de inmediato en el consultorio
   const handleConfirm = () => {
     if (amount <= 0) return toast.error("El monto debe ser mayor a 0");
 
@@ -83,8 +85,38 @@ export function PayConsultationDialog({
     if (onSuccess) onSuccess();
   };
 
+  // Opción 2: Enviar orden de cobro a recepción/caja para que la cobre la recepcionista
+  const handleSendToReception = () => {
+    if (amount <= 0) return toast.error("El monto debe ser mayor a 0");
+
+    const baseUnitPrice = Math.round(amount / 1.13);
+
+    const inv = finance.createInvoice({
+      clientId: data.clientId,
+      clientName: data.clientName || "Cliente general",
+      petName: data.petName,
+      vetName: data.vetName,
+      status: "Pendiente",
+      items: [
+        {
+          description: `${concept}${data.reason ? ` — ${data.reason}` : ""}`,
+          quantity: 1,
+          unitPrice: baseUnitPrice,
+          discount: 0,
+          kind: "Consulta",
+        },
+      ],
+      notes: `Atención médica de ${data.petName || "paciente"} enviada para cobro en recepción.`,
+    });
+
+    setPendingSentNum(inv.number);
+    toast.success(`Orden de cobro ${inv.number} enviada a Recepción / Caja`);
+    if (onSuccess) onSuccess();
+  };
+
   const handleClose = () => {
     setCreatedInvoiceNum(null);
+    setPendingSentNum(null);
     onOpenChange(false);
   };
 
@@ -94,7 +126,11 @@ export function PayConsultationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Receipt className="h-5 w-5 text-emerald-600" />
-            {createdInvoiceNum ? "Comprobante de Pago Generado" : "Cobrar Atención Médica"}
+            {createdInvoiceNum
+              ? "Comprobante de Pago Generado"
+              : pendingSentNum
+              ? "Orden Enviada a Recepción"
+              : "Cobro de Atención Médica"}
           </DialogTitle>
         </DialogHeader>
 
@@ -102,13 +138,13 @@ export function PayConsultationDialog({
           <div className="space-y-4 py-2 text-center sm:text-left">
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-900">Factura emitida:</span>
+                <span className="text-xs font-semibold text-emerald-900">Factura emitida y cancelada:</span>
                 <Badge className="bg-emerald-700 text-white font-mono font-bold">
                   {createdInvoiceNum}
                 </Badge>
               </div>
               <p className="text-xs text-emerald-800">
-                La consulta ha sido cancelada y registrada en <strong>Facturación y Finanzas</strong> y en el turno de <strong>Caja</strong>.
+                La consulta ha sido cobrada y registrada en <strong>Facturación</strong> y en el turno de <strong>Caja</strong>.
               </p>
             </div>
 
@@ -134,6 +170,50 @@ export function PayConsultationDialog({
             <div className="flex gap-2 pt-2">
               <Button asChild className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
                 <Link to="/facturacion">Ver en Facturación</Link>
+              </Button>
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={handleClose}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        ) : pendingSentNum ? (
+          <div className="space-y-4 py-2 text-center sm:text-left">
+            <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-sky-900">Orden enviada a recepción:</span>
+                <Badge className="bg-sky-700 text-white font-mono font-bold">
+                  {pendingSentNum}
+                </Badge>
+              </div>
+              <p className="text-xs text-sky-800">
+                Se ha generado la <strong>Factura Pendiente</strong>. La recepción o caja puede cobrarla de inmediato desde <strong>Punto de Venta</strong> o <strong>Facturación</strong>.
+              </p>
+            </div>
+
+            <div className="p-3 bg-muted/20 rounded-xl border text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Paciente:</span>
+                <span className="font-semibold">{data.petName || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tutor:</span>
+                <span className="font-semibold">{data.clientName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Estado:</span>
+                <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+                  Pendiente de cobro
+                </Badge>
+              </div>
+              <div className="flex justify-between text-sm font-bold pt-1 border-t">
+                <span>Total a cobrar en caja:</span>
+                <span className="text-primary font-bold">{formatCRC(amount)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button asChild className="flex-1 bg-primary hover:bg-primary/90 text-white rounded-xl">
+                <Link to="/punto-venta">Ir a Punto de Venta</Link>
               </Button>
               <Button variant="outline" className="flex-1 rounded-xl" onClick={handleClose}>
                 Cerrar
@@ -186,7 +266,7 @@ export function PayConsultationDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Método de Pago</Label>
+                <Label className="text-xs">Método (Si cobra aquí)</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v as FinancePaymentMethod)}>
                   <SelectTrigger className="h-9 text-xs font-medium">
                     <SelectValue />
@@ -228,16 +308,35 @@ export function PayConsultationDialog({
               </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
-              <Button variant="outline" onClick={handleClose} className="rounded-xl">
-                Cancelar
-              </Button>
+            <DialogFooter className="pt-2 border-t flex flex-col sm:flex-row gap-2 justify-between items-center">
               <Button
-                onClick={handleConfirm}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                className="rounded-xl text-xs text-muted-foreground w-full sm:w-auto"
               >
-                <Receipt className="h-4 w-4 mr-1.5" /> Confirmar Cobro ({formatCRC(amount)})
+                Omitir
               </Button>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendToReception}
+                  className="rounded-xl border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-950/40 text-xs font-semibold h-9"
+                  title="Envía la orden a recepción para que el tutor pague en caja"
+                >
+                  <Building2 className="h-4 w-4 mr-1.5" /> Enviar a Recepción / Caja
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirm}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs h-9 shadow-sm"
+                  title="Registra el cobro y pago inmediatamente en consultorio"
+                >
+                  <Receipt className="h-4 w-4 mr-1.5" /> Cobrar Ahora ({formatCRC(amount)})
+                </Button>
+              </div>
             </DialogFooter>
           </div>
         )}
